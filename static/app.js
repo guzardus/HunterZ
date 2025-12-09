@@ -39,33 +39,54 @@ function initializeCharts() {
                 width: chartElement.clientWidth,
                 height: 300,
                 layout: {
-                    background: { color: '#000000' },
-                    textColor: '#00ff00',
+                    background: { 
+                        type: 'solid',
+                        color: 'rgba(0, 8, 20, 0.95)'
+                    },
+                    textColor: '#00d4ff',
                 },
                 grid: {
-                    vertLines: { color: '#1a0000' },
-                    horzLines: { color: '#1a0000' },
+                    vertLines: { 
+                        color: 'rgba(0, 102, 255, 0.1)',
+                        style: 1,
+                    },
+                    horzLines: { 
+                        color: 'rgba(0, 102, 255, 0.1)',
+                        style: 1,
+                    },
                 },
                 crosshair: {
                     mode: LightweightCharts.CrosshairMode.Normal,
+                    vertLine: {
+                        color: 'rgba(0, 170, 255, 0.5)',
+                        width: 1,
+                        style: 3,
+                    },
+                    horzLine: {
+                        color: 'rgba(0, 170, 255, 0.5)',
+                        width: 1,
+                        style: 3,
+                    },
                 },
                 rightPriceScale: {
-                    borderColor: '#ff0000',
+                    borderColor: '#0066ff',
+                    textColor: '#00d4ff',
                 },
                 timeScale: {
-                    borderColor: '#ff0000',
+                    borderColor: '#0066ff',
+                    textColor: '#00d4ff',
                     timeVisible: true,
                     secondsVisible: false,
                 },
             });
 
             const candleSeries = chart.addCandlestickSeries({
-                upColor: '#00ff00',
-                downColor: '#ff0000',
-                borderUpColor: '#00ff00',
-                borderDownColor: '#ff0000',
-                wickUpColor: '#00ff00',
-                wickDownColor: '#ff0000',
+                upColor: '#00ff88',
+                downColor: '#ff3366',
+                borderUpColor: '#00ff88',
+                borderDownColor: '#ff3366',
+                wickUpColor: '#00ff88',
+                wickDownColor: '#ff3366',
             });
 
             charts[symbolKey] = chart;
@@ -249,17 +270,19 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
             markers.push({
                 time: ob.time,
                 position: 'belowBar',
-                color: '#00ff00',
+                color: '#00ff88',
                 shape: 'arrowUp',
-                text: `Bull OB: ${ob.ob_top.toFixed(2)}`
+                text: `🟢 Bullish OB @ ${ob.ob_top.toFixed(2)}`,
+                size: 2
             });
         } else if (ob.type === 'bearish') {
             markers.push({
                 time: ob.time,
                 position: 'aboveBar',
-                color: '#ff0000',
+                color: '#ff3366',
                 shape: 'arrowDown',
-                text: `Bear OB: ${ob.ob_bottom.toFixed(2)}`
+                text: `🔴 Bearish OB @ ${ob.ob_bottom.toFixed(2)}`,
+                size: 2
             });
         }
     });
