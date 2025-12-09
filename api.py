@@ -2,13 +2,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
 import uvicorn
 import state
 import main
 import config
 import os
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Start the bot loop in background
+    main.start_bot_thread()
+    yield
+    # Shutdown: cleanup if needed
+
+app = FastAPI(lifespan=lifespan)
 
 # Allow CORS for frontend
 app.add_middleware(
@@ -23,11 +31,6 @@ app.add_middleware(
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-@app.on_event("startup")
-async def startup_event():
-    # Start the bot loop in background
-    main.start_bot_thread()
 
 @app.get("/")
 def serve_frontend():

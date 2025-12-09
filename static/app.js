@@ -16,6 +16,20 @@ const UPDATE_INTERVAL = 5000; // Update every 5 seconds
 
 // Initialize charts
 function initializeCharts() {
+    // Check if LightweightCharts is available
+    if (typeof LightweightCharts === 'undefined') {
+        console.warn('LightweightCharts library not loaded. Charts will not be displayed.');
+        // Show a message in each chart container
+        TRADING_PAIRS.forEach(symbol => {
+            const symbolKey = symbol.replace('/', '');
+            const chartElement = document.getElementById(`chart-${symbolKey}`);
+            if (chartElement) {
+                chartElement.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666; text-align: center;">📊<br>Chart will display when data is available</div>';
+            }
+        });
+        return;
+    }
+    
     TRADING_PAIRS.forEach(symbol => {
         const symbolKey = symbol.replace('/', '');
         const chartElement = document.getElementById(`chart-${symbolKey}`);
