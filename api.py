@@ -19,6 +19,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # Allow CORS for frontend
+# Note: For production deployment, restrict allow_origins to specific domains
+# or remove allow_credentials if not needed
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -56,7 +58,7 @@ def get_status():
 def get_balance():
     """Get wallet balance in USDT"""
     total_in_positions = sum(
-        pos.get('entry_price', 0) * pos.get('size', 0) 
+        pos.get('mark_price', pos.get('entry_price', 0)) * pos.get('size', 0) 
         for pos in state.bot_state.positions.values()
     )
     return {

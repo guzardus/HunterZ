@@ -158,6 +158,12 @@ HunterZ/
 - Check if Binance API is accessible from your region
 - Verify testnet mode setting matches your API keys
 
+### Charts Not Displaying
+- The frontend uses TradingView Lightweight Charts from CDN
+- If CDN is blocked, charts will show a placeholder message
+- For production deployments with restricted internet, consider hosting the chart library locally
+- The system functions correctly without charts; they are for visualization only
+
 ### No Order Blocks Detected
 - Order blocks take time to form
 - The algorithm requires sufficient market movement
