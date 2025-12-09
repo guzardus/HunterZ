@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HunterZ - Order Block Trading System</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <h1>HUNTER<span class="highlight">Z</span></h1>
+                <p class="tagline">Order Block Trading System</p>
+            </div>
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="label">Balance:</span>
+                    <span id="balance" class="value">0.00 USDT</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">Total P&L:</span>
+                    <span id="total-pnl" class="value">0.00 USDT</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">Active Positions:</span>
+                    <span id="active-positions" class="value">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">Last Update:</span>
+                    <span id="last-update" class="value">-</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Wallet Info -->
+        <section class="wallet-section">
+            <h2>Wallet Overview <span class="highlight">(USDT)</span></h2>
+            <div class="wallet-grid">
+                <div class="wallet-card">
+                    <div class="wallet-label">Total Balance</div>
+                    <div class="wallet-value" id="wallet-total">0.00</div>
+                </div>
+                <div class="wallet-card">
+                    <div class="wallet-label">Available</div>
+                    <div class="wallet-value" id="wallet-free">0.00</div>
+                </div>
+                <div class="wallet-card">
+                    <div class="wallet-label">In Positions</div>
+                    <div class="wallet-value" id="wallet-in-positions">0.00</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Trading Charts Grid -->
+        <section class="charts-section">
+            <h2>Live Trading Pairs <span class="highlight">(30min Order Blocks)</span></h2>
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>BTC/USDT</h3>
+                        <span class="price" id="price-BTCUSDT">$0.00</span>
+                    </div>
+                    <div id="chart-BTCUSDT" class="chart"></div>
+                    <div class="chart-info" id="info-BTCUSDT"></div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>ETH/USDT</h3>
+                        <span class="price" id="price-ETHUSDT">$0.00</span>
+                    </div>
+                    <div id="chart-ETHUSDT" class="chart"></div>
+                    <div class="chart-info" id="info-ETHUSDT"></div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>SOL/USDT</h3>
+                        <span class="price" id="price-SOLUSDT">$0.00</span>
+                    </div>
+                    <div id="chart-SOLUSDT" class="chart"></div>
+                    <div class="chart-info" id="info-SOLUSDT"></div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>UNI/USDT</h3>
+                        <span class="price" id="price-UNIUSDT">$0.00</span>
+                    </div>
+                    <div id="chart-UNIUSDT" class="chart"></div>
+                    <div class="chart-info" id="info-UNIUSDT"></div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>DOT/USDT</h3>
+                        <span class="price" id="price-DOTUSDT">$0.00</span>
+                    </div>
+                    <div id="chart-DOTUSDT" class="chart"></div>
+                    <div class="chart-info" id="info-DOTUSDT"></div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>BNB/USDT</h3>
+                        <span class="price" id="price-BNBUSDT">$0.00</span>
+                    </div>
+                    <div id="chart-BNBUSDT" class="chart"></div>
+                    <div class="chart-info" id="info-BNBUSDT"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Active Positions -->
+        <section class="positions-section">
+            <h2>Active Positions</h2>
+            <div class="table-container">
+                <table id="positions-table">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Size</th>
+                            <th>Entry Price</th>
+                            <th>Mark Price</th>
+                            <th>Unrealized P&L</th>
+                            <th>Leverage</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positions-tbody">
+                        <tr>
+                            <td colspan="7" class="no-data">No active positions</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Trade History -->
+        <section class="trades-section">
+            <h2>Recent Trades</h2>
+            <div class="table-container">
+                <table id="trades-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Entry</th>
+                            <th>Exit</th>
+                            <th>P&L</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trades-tbody">
+                        <tr>
+                            <td colspan="7" class="no-data">No trades yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

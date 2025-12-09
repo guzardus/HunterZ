@@ -7,8 +7,11 @@ class BotState:
     balance: float = 0.0
     active_trades: List[Dict] = field(default_factory=list)
     order_blocks: Dict[str, List[Dict]] = field(default_factory=dict) # symbol -> list of OBs
+    positions: Dict[str, Dict] = field(default_factory=dict) # symbol -> position info
     last_update: str = ""
     ohlcv_data: Dict[str, List[Dict]] = field(default_factory=dict) # symbol -> recent data for charting
+    trade_history: List[Dict] = field(default_factory=list)
+    total_pnl: float = 0.0
 
 # Global instance
 bot_state = BotState()
@@ -38,3 +41,29 @@ def update_ohlcv(symbol: str, df):
             'close': row['close'],
         })
     bot_state.ohlcv_data[symbol] = records
+
+def update_position(symbol: str, position: Dict):
+    """Update position information for a symbol"""
+    if position and float(position.get('positionAmt', 0)) != 0:
+        bot_state.positions[symbol] = {
+            'symbol': symbol,
+            'side': 'LONG' if float(position['positionAmt']) > 0 else 'SHORT',
+            'size': abs(float(position['positionAmt'])),
+            'entry_price': float(position['entryPrice']),
+            'mark_price': float(position.get('markPrice', 0)),
+            'unrealized_pnl': float(position.get('unRealizedProfit', 0)),
+            'leverage': float(position.get('leverage', 1))
+        }
+    elif symbol in bot_state.positions:
+        del bot_state.positions[symbol]
+
+def add_trade(trade: Dict):
+    """Add a trade to history"""
+    trade['timestamp'] = datetime.datetime.now().isoformat()
+    bot_state.trade_history.insert(0, trade)
+    # Keep only last 100 trades
+    bot_state.trade_history = bot_state.trade_history[:100]
+
+def update_total_pnl(pnl: float):
+    """Update total PnL"""
+    bot_state.total_pnl = pnl

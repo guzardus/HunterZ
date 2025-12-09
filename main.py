@@ -34,7 +34,7 @@ def run_bot_logic():
                 
                 # Check current position
                 position = client.get_position(symbol)
-                # state.update_position(symbol, position) # TODO: Add to state if needed
+                state.update_position(symbol, position)
                 
                 # 2. Fetch Data
                 ohlcv = client.fetch_ohlcv(symbol)
