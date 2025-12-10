@@ -18,8 +18,41 @@
         <!-- Header -->
         <header class="header">
             <div class="logo">
-                <h1>HUNTER<span class="highlight">Z</span></h1>
-                <p class="tagline">Order Block Trading System</p>
+                <div class="logo-emblem">
+                    <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Shield background -->
+                        <path d="M30 5 L50 12 L50 28 C50 40 42 50 30 55 C18 50 10 40 10 28 L10 12 Z" 
+                              fill="url(#gradient1)" stroke="#1e3a8a" stroke-width="1.5"/>
+                        
+                        <!-- Target circles -->
+                        <circle cx="30" cy="30" r="12" stroke="#ffffff" stroke-width="2" fill="none" opacity="0.8"/>
+                        <circle cx="30" cy="30" r="8" stroke="#ffffff" stroke-width="2" fill="none" opacity="0.6"/>
+                        <circle cx="30" cy="30" r="4" fill="#ffffff" opacity="0.9"/>
+                        
+                        <!-- Crosshair -->
+                        <line x1="30" y1="18" x2="30" y2="22" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"/>
+                        <line x1="30" y1="38" x2="30" y2="42" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"/>
+                        <line x1="18" y1="30" x2="22" y2="30" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"/>
+                        <line x1="38" y1="30" x2="42" y2="30" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"/>
+                        
+                        <!-- Lightning bolt for Z -->
+                        <path d="M32 24 L28 30 L31 30 L29 36 L33 30 L30 30 Z" 
+                              fill="#fbbf24" stroke="#f59e0b" stroke-width="0.5" opacity="0.95"/>
+                        
+                        <!-- Gradient definitions -->
+                        <defs>
+                            <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#1e3a8a;stop-opacity:1" />
+                                <stop offset="50%" style="stop-color:#3b82f6;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>HUNTER<span class="highlight">Z</span></h1>
+                    <p class="tagline">Order Block Trading System</p>
+                </div>
             </div>
             <div class="status-bar">
                 <div class="status-item">
@@ -128,6 +161,36 @@
                     </div>
                     <div id="chart-BNBUSDT" class="chart"></div>
                     <div class="chart-info" id="info-BNBUSDT">
+                        <div class="no-data">Waiting for data...</div>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>ADA/USDT <span class="highlight">[30m]</span></h3>
+                        <span class="price" id="price-ADAUSDT">$0.00</span>
+                    </div>
+                    <div id="chart-ADAUSDT" class="chart"></div>
+                    <div class="chart-info" id="info-ADAUSDT">
+                        <div class="no-data">Waiting for data...</div>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>LTC/USDT <span class="highlight">[30m]</span></h3>
+                        <span class="price" id="price-LTCUSDT">$0.00</span>
+                    </div>
+                    <div id="chart-LTCUSDT" class="chart"></div>
+                    <div class="chart-info" id="info-LTCUSDT">
+                        <div class="no-data">Waiting for data...</div>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>AVAX/USDT <span class="highlight">[30m]</span></h3>
+                        <span class="price" id="price-AVAXUSDT">$0.00</span>
+                    </div>
+                    <div id="chart-AVAXUSDT" class="chart"></div>
+                    <div class="chart-info" id="info-AVAXUSDT">
                         <div class="no-data">Waiting for data...</div>
                     </div>
                 </div>
