@@ -117,10 +117,14 @@ def run_bot_logic():
                     # Place Stop Loss
                     sl_price = client.exchange.price_to_precision(symbol, params['stop_loss'])
                     sl_order = client.place_stop_loss(symbol, sl_tp_side, qty, sl_price)
+                    if not sl_order:
+                        print(f"WARNING: Entry order placed but Stop Loss failed for {symbol}")
                     
                     # Place Take Profit
                     tp_price = client.exchange.price_to_precision(symbol, params['take_profit'])
                     tp_order = client.place_take_profit(symbol, sl_tp_side, qty, tp_price)
+                    if not tp_order:
+                        print(f"WARNING: Entry order placed but Take Profit failed for {symbol}")
             
             # Decrease sleep time for more responsive UI updates? 
             # Or keep it, as 30m candles don't change fast.
