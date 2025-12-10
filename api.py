@@ -51,7 +51,8 @@ def get_status():
         "total_pnl": state.bot_state.total_pnl,
         "last_update": state.bot_state.last_update,
         "trading_pairs": config.TRADING_PAIRS,
-        "active_positions": len(state.bot_state.positions)
+        "active_positions": len(state.bot_state.positions),
+        "positions": state.bot_state.positions  # Include positions for unrealized P&L calculation
     }
 
 @app.get("/api/balance")
