@@ -104,19 +104,44 @@ def get_market_data(symbol: str):
 
 @app.get("/api/all-market-data")
 def get_all_market_data():
-    """Get market data for all trading pairs"""
+    """Get market data for all trading pairs with order block distance calculations"""
     result = {}
     for symbol in config.TRADING_PAIRS:
         ohlcv = state.bot_state.ohlcv_data.get(symbol, [])
         obs = state.bot_state.order_blocks.get(symbol, [])
         position = state.bot_state.positions.get(symbol)
+        pending_order = state.get_pending_order(symbol)
+        
+        current_price = ohlcv[-1]['close'] if ohlcv else 0
+        
+        # Calculate distance to order blocks
+        obs_with_distance = []
+        for ob in obs:
+            ob_copy = ob.copy()
+            # Determine entry price based on OB type
+            if ob.get('type') == 'bullish':
+                entry_price = ob.get('ob_top', 0)
+            else:  # bearish
+                entry_price = ob.get('ob_bottom', 0)
+            
+            # Calculate percentage distance from current price to entry
+            if current_price > 0 and entry_price > 0:
+                distance_pct = ((entry_price - current_price) / current_price) * 100
+                ob_copy['distance_pct'] = round(distance_pct, 2)
+                ob_copy['entry_price'] = entry_price
+            else:
+                ob_copy['distance_pct'] = 0
+                ob_copy['entry_price'] = entry_price
+            
+            obs_with_distance.append(ob_copy)
         
         result[symbol] = {
             "symbol": symbol,
             "ohlcv": ohlcv,
-            "order_blocks": obs,
+            "order_blocks": obs_with_distance,
             "position": position,
-            "current_price": ohlcv[-1]['close'] if ohlcv else 0
+            "current_price": current_price,
+            "pending_order": pending_order
         }
     return result
 
