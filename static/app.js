@@ -386,6 +386,15 @@ async function updateTrades() {
     }
 }
 
+// Helper function to validate pending order object
+function isPendingOrderValid(pendingOrder) {
+    return pendingOrder && 
+           typeof pendingOrder === 'object' && 
+           Object.keys(pendingOrder).length > 0 &&
+           pendingOrder.params &&
+           typeof pendingOrder.params === 'object';
+}
+
 // Update chart with market data and draw order blocks
 async function updateMarketData() {
     try {
@@ -410,6 +419,8 @@ async function updateMarketData() {
             
             // Display order blocks info with detailed information
             const infoElement = document.getElementById(`info-${symbolKey}`);
+            const labelElement = document.getElementById(`info-${symbolKey}-label`);
+            
             if (infoElement && data.order_blocks) {
                 const bullishOBs = data.order_blocks.filter(ob => ob.type === 'bullish');
                 const bearishOBs = data.order_blocks.filter(ob => ob.type === 'bearish');
@@ -417,25 +428,63 @@ async function updateMarketData() {
                 limitOrdersCount += bullishOBs.length + bearishOBs.length;
                 
                 let infoHTML = '';
+                let labelHTML = '';
                 
-                // Show bullish order blocks
+                // Check if there's a valid pending order for this specific symbol
+                // Note: data.pending_order is fetched per-symbol from backend
+                const hasPendingOrder = isPendingOrderValid(data.pending_order);
+                
+                // Helper function for distance formatting
+                const formatDistance = (distancePct) => {
+                    const sign = distancePct > 0 ? '+' : '';
+                    const color = distancePct > 0 ? 'var(--signal-green)' : 'var(--signal-red)';
+                    return { sign, color };
+                };
+                
+                // Show bullish order blocks with distance
                 if (bullishOBs.length > 0) {
-                    infoHTML += `<div class="ob-info bullish">🟢 ${bullishOBs.length} Bullish OB`;
-                    const latestBullish = bullishOBs[0];
-                    if (latestBullish) {
-                        infoHTML += ` @ $${latestBullish.ob_top ? latestBullish.ob_top.toFixed(2) : 'N/A'}`;
-                    }
-                    infoHTML += '</div>';
+                    bullishOBs.forEach((ob, index) => {
+                        const { sign, color } = formatDistance(ob.distance_pct);
+                        const orderIndicator = hasPendingOrder ? '📋 ' : '';
+                        
+                        infoHTML += `<div class="ob-info bullish">
+                            🟢 ${orderIndicator}Bullish OB @ $${ob.entry_price ? ob.entry_price.toFixed(2) : 'N/A'}
+                            <span style="color: ${color}; margin-left: 8px; font-weight: 500;">
+                                ${sign}${ob.distance_pct}%
+                            </span>
+                        </div>`;
+                        
+                        // Update label with closest OB
+                        if (index === 0) {
+                            const absDistance = Math.abs(ob.distance_pct);
+                            labelHTML = hasPendingOrder 
+                                ? `📋 Order placed • ${absDistance.toFixed(1)}% away`
+                                : `${absDistance.toFixed(1)}% to entry`;
+                        }
+                    });
                 }
                 
-                // Show bearish order blocks
+                // Show bearish order blocks with distance
                 if (bearishOBs.length > 0) {
-                    infoHTML += `<div class="ob-info bearish">🔴 ${bearishOBs.length} Bearish OB`;
-                    const latestBearish = bearishOBs[0];
-                    if (latestBearish) {
-                        infoHTML += ` @ $${latestBearish.ob_bottom ? latestBearish.ob_bottom.toFixed(2) : 'N/A'}`;
-                    }
-                    infoHTML += '</div>';
+                    bearishOBs.forEach((ob, index) => {
+                        const { sign, color } = formatDistance(ob.distance_pct);
+                        const orderIndicator = hasPendingOrder ? '📋 ' : '';
+                        
+                        infoHTML += `<div class="ob-info bearish">
+                            🔴 ${orderIndicator}Bearish OB @ $${ob.entry_price ? ob.entry_price.toFixed(2) : 'N/A'}
+                            <span style="color: ${color}; margin-left: 8px; font-weight: 500;">
+                                ${sign}${ob.distance_pct}%
+                            </span>
+                        </div>`;
+                        
+                        // Update label with closest OB if no bullish OB
+                        if (index === 0 && bullishOBs.length === 0) {
+                            const absDistance = Math.abs(ob.distance_pct);
+                            labelHTML = hasPendingOrder 
+                                ? `📋 Order placed • ${absDistance.toFixed(1)}% away`
+                                : `${absDistance.toFixed(1)}% to entry`;
+                        }
+                    });
                 }
                 
                 // Show position info if exists
@@ -459,7 +508,20 @@ async function updateMarketData() {
                     }
                 }
                 
+                // Show pending order info if exists
+                if (hasPendingOrder) {
+                    const params = data.pending_order.params;
+                    infoHTML += `<div class="ob-info" style="background: rgba(255,255,255,0.05);">
+                        📋 Limit Order: ${params.side ? params.side.toUpperCase() : 'N/A'} @ $${params.entry_price ? params.entry_price.toFixed(2) : 'N/A'}
+                    </div>`;
+                }
+                
                 infoElement.innerHTML = infoHTML || '<div class="no-data">No order blocks detected</div>';
+                
+                // Update label
+                if (labelElement) {
+                    labelElement.innerHTML = labelHTML || 'Scanning...';
+                }
                 
                 // Draw order blocks and markers on chart
                 drawOrderBlocks(symbolKey, data.order_blocks, data.position);
