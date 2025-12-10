@@ -51,8 +51,24 @@
                 <div class="stat-val value" id="active-positions-count" style="margin-top: 15px; font-size: 2rem;">0</div>
             </div>
             <div class="glass-card">
-                <div class="label uppercase">Limit Orders</div>
-                <div class="stat-val value" id="limit-orders-count" style="margin-top: 15px; font-size: 2rem;">0</div>
+                <div class="label uppercase">Pending Orders</div>
+                <div class="stat-val value" id="pending-orders-metric" style="margin-top: 15px; font-size: 2rem;">0</div>
+            </div>
+            <div class="glass-card">
+                <div class="label uppercase">Exchange Orders</div>
+                <div class="stat-val value" id="exchange-orders-metric" style="margin-top: 15px; font-size: 2rem;">0</div>
+            </div>
+            <div class="glass-card">
+                <div class="label uppercase">Placed</div>
+                <div class="stat-val value" id="placed-orders-metric" style="margin-top: 15px; font-size: 2rem;">0</div>
+            </div>
+            <div class="glass-card">
+                <div class="label uppercase">Cancelled</div>
+                <div class="stat-val value" id="cancelled-orders-metric" style="margin-top: 15px; font-size: 2rem;">0</div>
+            </div>
+            <div class="glass-card">
+                <div class="label uppercase">Filled</div>
+                <div class="stat-val value" id="filled-orders-metric" style="margin-top: 15px; font-size: 2rem;">0</div>
             </div>
             <div class="glass-card">
                 <div class="label uppercase">Total P&L</div>
@@ -63,6 +79,16 @@
                 <div class="stat-val value" id="win-rate" style="margin-top: 15px; font-size: 2rem;">0%</div>
             </div>
         </div>
+
+        <!-- RECENT ACTIONS LOG -->
+        <section class="recent-actions-section" style="margin-bottom: 2rem;">
+            <div class="feed-title" style="margin-bottom: 1.5rem;">RECENT RECONCILIATION ACTIONS</div>
+            <div class="glass-card">
+                <div id="recent-actions-list" style="max-height: 300px; overflow-y: auto;">
+                    <div class="no-data">No recent actions</div>
+                </div>
+            </div>
+        </section>
 
         <!-- MAIN FEED -->
         <div class="feed-title">
