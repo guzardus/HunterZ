@@ -28,7 +28,7 @@ body {
     padding: 4rem;
     min-height: 100vh;
     overflow-x: hidden;
-    background: radial-gradient(circle at 50% 50%, #0a0a0a 0%, #000000 120%);
+    background: radial-gradient(circle at 50% 50%, #0a0a0a 0%, var(--bg-deep) 120%);
 }
 
 /* --- BACKGROUND CANVAS --- */
