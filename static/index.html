@@ -3,9 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HunterZ - Cosmic Order Block Trading System</title>
+    <title>HunterZ - Order Block Trading System</title>
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- LightweightCharts for candlestick charts -->
+    <!-- Try loading from CDN first, fallback to local mock if CDN is blocked -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js" 
+            onerror="console.log('CDN blocked, loading fallback chart library'); var script = document.createElement('script'); script.src = '/static/lightweight-charts.js'; document.head.appendChild(script);"></script>
+
+
+
 </head>
 <body>
     <div class="container">
@@ -17,94 +23,113 @@
             </div>
             <div class="status-bar">
                 <div class="status-item">
-                    <span class="label">Balance:</span>
+                    <span class="label">USDT Demo Futures</span>
                     <span id="balance" class="value">0.00 USDT</span>
                 </div>
                 <div class="status-item">
-                    <span class="label">Total P&L:</span>
-                    <span id="total-pnl" class="value">0.00 USDT</span>
+                    <span class="label">Unrealised P&L</span>
+                    <span id="unrealized-pnl" class="value">0.00 USDT</span>
                 </div>
                 <div class="status-item">
-                    <span class="label">Active Positions:</span>
-                    <span id="active-positions" class="value">0</span>
+                    <span class="label">Total Balance</span>
+                    <span id="total-balance" class="value">0.00 USDT</span>
                 </div>
                 <div class="status-item">
-                    <span class="label">Last Update:</span>
-                    <span id="last-update" class="value">-</span>
+                    <span class="label">Next Refresh</span>
+                    <span id="refresh-timer" class="value">60s</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">Melbourne Time</span>
+                    <span id="melbourne-time" class="value">--:--:--</span>
                 </div>
             </div>
         </header>
 
-        <!-- Wallet Info -->
-        <section class="wallet-section">
-            <h2>Wallet Overview <span class="highlight">(USDT)</span></h2>
-            <div class="wallet-grid">
-                <div class="wallet-card">
-                    <div class="wallet-label">Total Balance</div>
-                    <div class="wallet-value" id="wallet-total">0.00</div>
+        <!-- Additional Info Section -->
+        <section class="info-section">
+            <div class="info-grid">
+                <div class="info-card">
+                    <h3>Active Positions</h3>
+                    <div class="value" id="active-positions-count">0</div>
                 </div>
-                <div class="wallet-card">
-                    <div class="wallet-label">Available</div>
-                    <div class="wallet-value" id="wallet-free">0.00</div>
+                <div class="info-card">
+                    <h3>Limit Orders Placed</h3>
+                    <div class="value" id="limit-orders-count">0</div>
                 </div>
-                <div class="wallet-card">
-                    <div class="wallet-label">In Positions</div>
-                    <div class="wallet-value" id="wallet-in-positions">0.00</div>
+                <div class="info-card">
+                    <h3>Total P&L</h3>
+                    <div class="value" id="total-pnl">0.00 USDT</div>
+                </div>
+                <div class="info-card">
+                    <h3>Win Rate</h3>
+                    <div class="value" id="win-rate">0%</div>
                 </div>
             </div>
         </section>
 
         <!-- Trading Charts Grid -->
         <section class="charts-section">
-            <h2>Live Trading Pairs <span class="highlight">(30min Order Blocks)</span></h2>
+            <h2>Live Trading Pairs <span class="highlight">(30min TF - Order Blocks)</span></h2>
             <div class="charts-grid">
                 <div class="chart-container">
                     <div class="chart-header">
-                        <h3>BTC/USDT <span class="highlight">[30min]</span></h3>
+                        <h3>BTC/USDT <span class="highlight">[30m]</span></h3>
                         <span class="price" id="price-BTCUSDT">$0.00</span>
                     </div>
                     <div id="chart-BTCUSDT" class="chart"></div>
-                    <div class="chart-info" id="info-BTCUSDT"></div>
+                    <div class="chart-info" id="info-BTCUSDT">
+                        <div class="no-data">Waiting for data...</div>
+                    </div>
                 </div>
                 <div class="chart-container">
                     <div class="chart-header">
-                        <h3>ETH/USDT <span class="highlight">[30min]</span></h3>
+                        <h3>ETH/USDT <span class="highlight">[30m]</span></h3>
                         <span class="price" id="price-ETHUSDT">$0.00</span>
                     </div>
                     <div id="chart-ETHUSDT" class="chart"></div>
-                    <div class="chart-info" id="info-ETHUSDT"></div>
+                    <div class="chart-info" id="info-ETHUSDT">
+                        <div class="no-data">Waiting for data...</div>
+                    </div>
                 </div>
                 <div class="chart-container">
                     <div class="chart-header">
-                        <h3>SOL/USDT <span class="highlight">[30min]</span></h3>
+                        <h3>SOL/USDT <span class="highlight">[30m]</span></h3>
                         <span class="price" id="price-SOLUSDT">$0.00</span>
                     </div>
                     <div id="chart-SOLUSDT" class="chart"></div>
-                    <div class="chart-info" id="info-SOLUSDT"></div>
+                    <div class="chart-info" id="info-SOLUSDT">
+                        <div class="no-data">Waiting for data...</div>
+                    </div>
                 </div>
                 <div class="chart-container">
                     <div class="chart-header">
-                        <h3>UNI/USDT <span class="highlight">[30min]</span></h3>
+                        <h3>UNI/USDT <span class="highlight">[30m]</span></h3>
                         <span class="price" id="price-UNIUSDT">$0.00</span>
                     </div>
                     <div id="chart-UNIUSDT" class="chart"></div>
-                    <div class="chart-info" id="info-UNIUSDT"></div>
+                    <div class="chart-info" id="info-UNIUSDT">
+                        <div class="no-data">Waiting for data...</div>
+                    </div>
                 </div>
                 <div class="chart-container">
                     <div class="chart-header">
-                        <h3>DOT/USDT <span class="highlight">[30min]</span></h3>
+                        <h3>DOT/USDT <span class="highlight">[30m]</span></h3>
                         <span class="price" id="price-DOTUSDT">$0.00</span>
                     </div>
                     <div id="chart-DOTUSDT" class="chart"></div>
-                    <div class="chart-info" id="info-DOTUSDT"></div>
+                    <div class="chart-info" id="info-DOTUSDT">
+                        <div class="no-data">Waiting for data...</div>
+                    </div>
                 </div>
                 <div class="chart-container">
                     <div class="chart-header">
-                        <h3>BNB/USDT <span class="highlight">[30min]</span></h3>
+                        <h3>BNB/USDT <span class="highlight">[30m]</span></h3>
                         <span class="price" id="price-BNBUSDT">$0.00</span>
                     </div>
                     <div id="chart-BNBUSDT" class="chart"></div>
-                    <div class="chart-info" id="info-BNBUSDT"></div>
+                    <div class="chart-info" id="info-BNBUSDT">
+                        <div class="no-data">Waiting for data...</div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -123,11 +148,13 @@
                             <th>Mark Price</th>
                             <th>Unrealized P&L</th>
                             <th>Leverage</th>
+                            <th>Take Profit</th>
+                            <th>Stop Loss</th>
                         </tr>
                     </thead>
                     <tbody id="positions-tbody">
                         <tr>
-                            <td colspan="7" class="no-data">No active positions</td>
+                            <td colspan="9" class="no-data">No active positions</td>
                         </tr>
                     </tbody>
                 </table>
@@ -136,23 +163,26 @@
 
         <!-- Trade History -->
         <section class="trades-section">
-            <h2>Recent Trades</h2>
+            <h2>Trade History</h2>
             <div class="table-container">
                 <table id="trades-table">
                     <thead>
                         <tr>
-                            <th>Time</th>
+                            <th>Time (Melbourne)</th>
                             <th>Symbol</th>
                             <th>Side</th>
-                            <th>Entry</th>
-                            <th>Exit</th>
+                            <th>Entry Price</th>
+                            <th>Exit Price</th>
+                            <th>Size</th>
                             <th>P&L</th>
+                            <th>P&L %</th>
+                            <th>Duration</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody id="trades-tbody">
                         <tr>
-                            <td colspan="7" class="no-data">No trades yet</td>
+                            <td colspan="10" class="no-data">No trades yet</td>
                         </tr>
                     </tbody>
                 </table>

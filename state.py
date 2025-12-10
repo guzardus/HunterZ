@@ -52,7 +52,9 @@ def update_position(symbol: str, position: Dict):
             'entry_price': float(position['entryPrice']),
             'mark_price': float(position.get('markPrice', 0)),
             'unrealized_pnl': float(position.get('unRealizedProfit', 0)),
-            'leverage': float(position.get('leverage', 1))
+            'leverage': float(position.get('leverage', 1)),
+            'take_profit': position.get('take_profit'),  # Add TP
+            'stop_loss': position.get('stop_loss')  # Add SL
         }
     elif symbol in bot_state.positions:
         del bot_state.positions[symbol]

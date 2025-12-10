@@ -1,5 +1,5 @@
 // HunterZ Trading System - Frontend JavaScript
-// TRON-themed Order Block Trading Dashboard
+// Ethereum.org inspired design with comprehensive dashboard
 
 const TRADING_PAIRS = [
     'BTC/USDT',
@@ -12,19 +12,44 @@ const TRADING_PAIRS = [
 
 const charts = {};
 const candlestickSeries = {};
-const UPDATE_INTERVAL = 5000; // Update every 5 seconds
+const orderBlockSeries = {};
+const markerSeries = {};
+const UPDATE_INTERVAL = 30000; // Update every 30 seconds for better responsiveness
+let lastUpdateTime = Date.now();
+let limitOrdersCount = 0;
 
-// Initialize charts
+// Melbourne timezone offset (AEDT is UTC+11, AEST is UTC+10)
+function getMelbourneTime() {
+    return new Date().toLocaleString('en-AU', { 
+        timeZone: 'Australia/Melbourne',
+        hour: '2-digit',
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: false
+    });
+}
+
+// Update refresh timer
+function updateRefreshTimer() {
+    const elapsed = Date.now() - lastUpdateTime;
+    const remaining = Math.max(0, Math.ceil((UPDATE_INTERVAL - elapsed) / 1000));
+    document.getElementById('refresh-timer').textContent = `${remaining}s`;
+}
+
+// Update Melbourne time
+function updateMelbourneTime() {
+    document.getElementById('melbourne-time').textContent = getMelbourneTime();
+}
+
+// Initialize charts with Ethereum.org style colors
 function initializeCharts() {
-    // Check if LightweightCharts is available
     if (typeof LightweightCharts === 'undefined') {
         console.warn('LightweightCharts library not loaded. Charts will not be displayed.');
-        // Show a message in each chart container
         TRADING_PAIRS.forEach(symbol => {
             const symbolKey = symbol.replace('/', '');
             const chartElement = document.getElementById(`chart-${symbolKey}`);
             if (chartElement) {
-                chartElement.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666; text-align: center;">📊<br>Chart will display when data is available</div>';
+                chartElement.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8; text-align: center;">📊<br>Chart will display when data is available</div>';
             }
         });
         return;
@@ -41,56 +66,57 @@ function initializeCharts() {
                 layout: {
                     background: { 
                         type: 'solid',
-                        color: 'rgba(0, 8, 20, 0.95)'
+                        color: 'rgba(255, 255, 255, 0.5)'
                     },
-                    textColor: '#00d4ff',
+                    textColor: '#475569',
                 },
                 grid: {
                     vertLines: { 
-                        color: 'rgba(0, 102, 255, 0.1)',
+                        color: 'rgba(59, 130, 246, 0.05)',
                         style: 1,
                     },
                     horzLines: { 
-                        color: 'rgba(0, 102, 255, 0.1)',
+                        color: 'rgba(59, 130, 246, 0.05)',
                         style: 1,
                     },
                 },
                 crosshair: {
                     mode: LightweightCharts.CrosshairMode.Normal,
                     vertLine: {
-                        color: 'rgba(0, 170, 255, 0.5)',
+                        color: 'rgba(59, 130, 246, 0.4)',
                         width: 1,
-                        style: 3,
+                        style: 2,
                     },
                     horzLine: {
-                        color: 'rgba(0, 170, 255, 0.5)',
+                        color: 'rgba(59, 130, 246, 0.4)',
                         width: 1,
-                        style: 3,
+                        style: 2,
                     },
                 },
                 rightPriceScale: {
-                    borderColor: '#0066ff',
-                    textColor: '#00d4ff',
+                    borderColor: 'rgba(59, 130, 246, 0.2)',
+                    textColor: '#475569',
                 },
                 timeScale: {
-                    borderColor: '#0066ff',
-                    textColor: '#00d4ff',
+                    borderColor: 'rgba(59, 130, 246, 0.2)',
+                    textColor: '#475569',
                     timeVisible: true,
                     secondsVisible: false,
                 },
             });
 
             const candleSeries = chart.addCandlestickSeries({
-                upColor: '#00ff88',
-                downColor: '#ff3366',
-                borderUpColor: '#00ff88',
-                borderDownColor: '#ff3366',
-                wickUpColor: '#00ff88',
-                wickDownColor: '#ff3366',
+                upColor: '#10b981',
+                downColor: '#ef4444',
+                borderUpColor: '#10b981',
+                borderDownColor: '#ef4444',
+                wickUpColor: '#10b981',
+                wickDownColor: '#ef4444',
             });
 
             charts[symbolKey] = chart;
             candlestickSeries[symbolKey] = candleSeries;
+            orderBlockSeries[symbolKey] = []; // Initialize order block series array
 
             // Make chart responsive
             new ResizeObserver(entries => {
@@ -110,35 +136,47 @@ async function updateStatus() {
         const response = await fetch('/api/status');
         const data = await response.json();
         
+        // Calculate total unrealized P&L from positions
+        let totalUnrealizedPnL = 0;
+        if (data.positions) {
+            Object.values(data.positions).forEach(pos => {
+                totalUnrealizedPnL += pos.unrealized_pnl || 0;
+            });
+        }
+        
+        // Update header values
         document.getElementById('balance').textContent = `${data.balance.toFixed(2)} USDT`;
+        document.getElementById('unrealized-pnl').textContent = `${totalUnrealizedPnL.toFixed(2)} USDT`;
+        document.getElementById('unrealized-pnl').className = totalUnrealizedPnL >= 0 ? 'value positive' : 'value negative';
+        
+        // Calculate total balance (wallet + unrealized P&L)
+        const totalBalance = data.balance + totalUnrealizedPnL;
+        document.getElementById('total-balance').textContent = `${totalBalance.toFixed(2)} USDT`;
+        document.getElementById('total-balance').className = totalBalance >= data.balance ? 'value positive' : 'value negative';
+        
+        // Update additional info
+        document.getElementById('active-positions-count').textContent = data.active_positions;
         document.getElementById('total-pnl').textContent = `${data.total_pnl.toFixed(2)} USDT`;
         document.getElementById('total-pnl').className = data.total_pnl >= 0 ? 'value positive' : 'value negative';
-        document.getElementById('active-positions').textContent = data.active_positions;
         
-        if (data.last_update) {
-            const date = new Date(data.last_update);
-            document.getElementById('last-update').textContent = date.toLocaleTimeString();
-        }
+        lastUpdateTime = Date.now();
     } catch (error) {
         console.error('Error updating status:', error);
     }
 }
 
-// Fetch and update wallet balance
+// Fetch and update wallet balance (not used in new design but keeping for compatibility)
 async function updateWallet() {
     try {
         const response = await fetch('/api/balance');
         const data = await response.json();
-        
-        document.getElementById('wallet-total').textContent = data.total.toFixed(2);
-        document.getElementById('wallet-free').textContent = data.free.toFixed(2);
-        document.getElementById('wallet-in-positions').textContent = data.in_positions.toFixed(2);
+        // Data still available if needed elsewhere
     } catch (error) {
         console.error('Error updating wallet:', error);
     }
 }
 
-// Fetch and update positions
+// Fetch and update positions with TP/SL info
 async function updatePositions() {
     try {
         const response = await fetch('/api/positions');
@@ -152,23 +190,25 @@ async function updatePositions() {
                     <td>${pos.symbol}</td>
                     <td class="${pos.side === 'LONG' ? 'positive' : 'negative'}">${pos.side}</td>
                     <td>${pos.size.toFixed(4)}</td>
-                    <td>${pos.entry_price.toFixed(2)}</td>
-                    <td>${pos.mark_price.toFixed(2)}</td>
+                    <td>$${pos.entry_price.toFixed(2)}</td>
+                    <td>$${pos.mark_price.toFixed(2)}</td>
                     <td class="${pos.unrealized_pnl >= 0 ? 'positive' : 'negative'}">
                         ${pos.unrealized_pnl.toFixed(2)} USDT
                     </td>
                     <td>${pos.leverage}x</td>
+                    <td>${pos.take_profit ? '$' + pos.take_profit.toFixed(2) : '-'}</td>
+                    <td>${pos.stop_loss ? '$' + pos.stop_loss.toFixed(2) : '-'}</td>
                 </tr>
             `).join('');
         } else {
-            tbody.innerHTML = '<tr><td colspan="7" class="no-data">No active positions</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="no-data">No active positions</td></tr>';
         }
     } catch (error) {
         console.error('Error updating positions:', error);
     }
 }
 
-// Fetch and update trade history
+// Fetch and update trade history with comprehensive data
 async function updateTrades() {
     try {
         const response = await fetch('/api/trades');
@@ -177,35 +217,73 @@ async function updateTrades() {
         const tbody = document.getElementById('trades-tbody');
         
         if (data.trades && data.trades.length > 0) {
-            tbody.innerHTML = data.trades.slice(0, 10).map(trade => {
-                const time = new Date(trade.timestamp).toLocaleString();
+            // Calculate win rate
+            const closedTrades = data.trades.filter(t => t.status === 'CLOSED' || t.pnl !== undefined);
+            const winningTrades = closedTrades.filter(t => t.pnl > 0);
+            const winRate = closedTrades.length > 0 ? (winningTrades.length / closedTrades.length * 100).toFixed(1) : 0;
+            document.getElementById('win-rate').textContent = `${winRate}%`;
+            document.getElementById('win-rate').className = winRate >= 50 ? 'value positive' : 'value negative';
+            
+            tbody.innerHTML = data.trades.slice(0, 20).map(trade => {
+                // Convert to Melbourne time
+                const time = new Date(trade.timestamp).toLocaleString('en-AU', { 
+                    timeZone: 'Australia/Melbourne',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                // Calculate P&L percentage
+                let pnlPercent = '-';
+                if (trade.entry_price && trade.pnl && trade.size && trade.size > 0) {
+                    pnlPercent = ((trade.pnl / (trade.entry_price * trade.size)) * 100).toFixed(2);
+                }
+                
+                // Calculate duration
+                let duration = '-';
+                if (trade.entry_time && trade.exit_time) {
+                    const durationMs = new Date(trade.exit_time) - new Date(trade.entry_time);
+                    const hours = Math.floor(durationMs / 3600000);
+                    const minutes = Math.floor((durationMs % 3600000) / 60000);
+                    duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+                }
+                
                 return `
                     <tr>
                         <td>${time}</td>
-                        <td>${trade.symbol || '-'}</td>
-                        <td>${trade.side || '-'}</td>
-                        <td>${trade.entry_price ? trade.entry_price.toFixed(2) : '-'}</td>
-                        <td>${trade.exit_price ? trade.exit_price.toFixed(2) : '-'}</td>
+                        <td><strong>${trade.symbol || '-'}</strong></td>
+                        <td class="${(trade.side === 'BUY' || trade.side === 'LONG') ? 'positive' : 'negative'}">${trade.side || '-'}</td>
+                        <td>$${trade.entry_price ? trade.entry_price.toFixed(2) : '-'}</td>
+                        <td>$${trade.exit_price ? trade.exit_price.toFixed(2) : '-'}</td>
+                        <td>${trade.size ? trade.size.toFixed(4) : '-'}</td>
                         <td class="${trade.pnl >= 0 ? 'positive' : 'negative'}">
                             ${trade.pnl ? trade.pnl.toFixed(2) : '-'} USDT
                         </td>
-                        <td>${trade.status || '-'}</td>
+                        <td class="${trade.pnl >= 0 ? 'positive' : 'negative'}">
+                            ${pnlPercent !== '-' ? pnlPercent + '%' : '-'}
+                        </td>
+                        <td>${duration}</td>
+                        <td><span class="info-badge ${trade.status === 'CLOSED' ? 'success' : ''}">${trade.status || '-'}</span></td>
                     </tr>
                 `;
             }).join('');
         } else {
-            tbody.innerHTML = '<tr><td colspan="7" class="no-data">No trades yet</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="no-data">No trades yet</td></tr>';
+            document.getElementById('win-rate').textContent = '0%';
         }
     } catch (error) {
         console.error('Error updating trades:', error);
     }
 }
 
-// Update chart with market data
+// Update chart with market data and draw order blocks
 async function updateMarketData() {
     try {
         const response = await fetch('/api/all-market-data');
         const allData = await response.json();
+        
+        limitOrdersCount = 0;
         
         for (const [symbol, data] of Object.entries(allData)) {
             const symbolKey = symbol.replace('/', '');
@@ -221,76 +299,194 @@ async function updateMarketData() {
                 candlestickSeries[symbolKey].setData(data.ohlcv);
             }
             
-            // Display order blocks info
+            // Display order blocks info with detailed information
             const infoElement = document.getElementById(`info-${symbolKey}`);
             if (infoElement && data.order_blocks) {
-                const bullishOBs = data.order_blocks.filter(ob => ob.type === 'bullish').length;
-                const bearishOBs = data.order_blocks.filter(ob => ob.type === 'bearish').length;
+                const bullishOBs = data.order_blocks.filter(ob => ob.type === 'bullish');
+                const bearishOBs = data.order_blocks.filter(ob => ob.type === 'bearish');
+                
+                limitOrdersCount += bullishOBs.length + bearishOBs.length;
                 
                 let infoHTML = '';
-                if (bullishOBs > 0) {
-                    infoHTML += `<div class="ob-info bullish">🟢 ${bullishOBs} Bullish OB</div>`;
+                
+                // Show bullish order blocks
+                if (bullishOBs.length > 0) {
+                    infoHTML += `<div class="ob-info bullish">🟢 ${bullishOBs.length} Bullish OB`;
+                    const latestBullish = bullishOBs[0];
+                    if (latestBullish) {
+                        infoHTML += ` @ $${latestBullish.ob_top ? latestBullish.ob_top.toFixed(2) : 'N/A'}`;
+                    }
+                    infoHTML += '</div>';
                 }
-                if (bearishOBs > 0) {
-                    infoHTML += `<div class="ob-info bearish">🔴 ${bearishOBs} Bearish OB</div>`;
+                
+                // Show bearish order blocks
+                if (bearishOBs.length > 0) {
+                    infoHTML += `<div class="ob-info bearish">🔴 ${bearishOBs.length} Bearish OB`;
+                    const latestBearish = bearishOBs[0];
+                    if (latestBearish) {
+                        infoHTML += ` @ $${latestBearish.ob_bottom ? latestBearish.ob_bottom.toFixed(2) : 'N/A'}`;
+                    }
+                    infoHTML += '</div>';
                 }
                 
                 // Show position info if exists
                 if (data.position) {
                     const pnlClass = data.position.unrealized_pnl >= 0 ? 'bullish' : 'bearish';
+                    const side = data.position.side === 'LONG' ? '📈' : '📉';
                     infoHTML += `<div class="ob-info ${pnlClass}">
-                        📊 ${data.position.side}: ${data.position.unrealized_pnl.toFixed(2)} USDT
+                        ${side} ${data.position.side}: ${data.position.unrealized_pnl.toFixed(2)} USDT
                     </div>`;
+                    
+                    // Show TP and SL if available
+                    if (data.position.take_profit || data.position.stop_loss) {
+                        infoHTML += `<div class="ob-info">`;
+                        if (data.position.take_profit) {
+                            infoHTML += `TP: $${data.position.take_profit.toFixed(2)} `;
+                        }
+                        if (data.position.stop_loss) {
+                            infoHTML += `SL: $${data.position.stop_loss.toFixed(2)}`;
+                        }
+                        infoHTML += `</div>`;
+                    }
                 }
                 
                 infoElement.innerHTML = infoHTML || '<div class="no-data">No order blocks detected</div>';
                 
-                // Draw order blocks on chart
+                // Draw order blocks and markers on chart
                 drawOrderBlocks(symbolKey, data.order_blocks, data.position);
             }
         }
+        
+        // Update limit orders count
+        document.getElementById('limit-orders-count').textContent = limitOrdersCount;
+        
     } catch (error) {
         console.error('Error updating market data:', error);
     }
 }
 
-// Draw order blocks on chart
+// Draw order blocks on chart with zones, entry, TP, and SL
 function drawOrderBlocks(symbolKey, orderBlocks, position) {
     const chart = charts[symbolKey];
     if (!chart || !orderBlocks) return;
     
-    // Remove existing markers
     const series = candlestickSeries[symbolKey];
     
-    // Add markers for order blocks
+    // Clear existing markers
+    series.setMarkers([]);
+    
+    // Remove existing order block series
+    if (orderBlockSeries[symbolKey] && orderBlockSeries[symbolKey].length > 0) {
+        orderBlockSeries[symbolKey].forEach(s => {
+            try {
+                chart.removeSeries(s);
+            } catch (e) {
+                console.warn(`Could not remove series for ${symbolKey}:`, e.message);
+            }
+        });
+        orderBlockSeries[symbolKey] = [];
+    } else if (!orderBlockSeries[symbolKey]) {
+        orderBlockSeries[symbolKey] = [];
+    }
+    
     const markers = [];
     
+    // Draw order block zones as rectangles
     orderBlocks.forEach(ob => {
+        if (!ob.time || !ob.ob_top || !ob.ob_bottom) return;
+        
+        // Create a line series for the order block zone
+        const lineSeries = chart.addLineSeries({
+            color: ob.type === 'bullish' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+            lineWidth: 0,
+            lastValueVisible: false,
+            priceLineVisible: false,
+        });
+        
+        // Draw the zone using price lines
+        const priceLineTop = {
+            price: ob.ob_top,
+            color: ob.type === 'bullish' ? '#10b981' : '#ef4444',
+            lineWidth: 1,
+            lineStyle: 2, // Dashed
+            axisLabelVisible: true,
+            title: ob.type === 'bullish' ? '🟢 OB Top' : '🔴 OB Top',
+        };
+        
+        const priceLineBottom = {
+            price: ob.ob_bottom,
+            color: ob.type === 'bullish' ? '#10b981' : '#ef4444',
+            lineWidth: 1,
+            lineStyle: 2, // Dashed
+            axisLabelVisible: true,
+            title: ob.type === 'bullish' ? '🟢 OB Bot' : '🔴 OB Bot',
+        };
+        
+        series.createPriceLine(priceLineTop);
+        series.createPriceLine(priceLineBottom);
+        
+        orderBlockSeries[symbolKey].push(lineSeries);
+        
+        // Add marker at the order block location
         if (ob.type === 'bullish') {
             markers.push({
                 time: ob.time,
                 position: 'belowBar',
-                color: '#00ff88',
+                color: '#10b981',
                 shape: 'arrowUp',
-                text: `🟢 Bullish OB @ ${ob.ob_top.toFixed(2)}`,
-                size: 2
+                text: `Bullish OB`,
+                size: 1
             });
         } else if (ob.type === 'bearish') {
             markers.push({
                 time: ob.time,
                 position: 'aboveBar',
-                color: '#ff3366',
+                color: '#ef4444',
                 shape: 'arrowDown',
-                text: `🔴 Bearish OB @ ${ob.ob_bottom.toFixed(2)}`,
-                size: 2
+                text: `Bearish OB`,
+                size: 1
             });
         }
     });
     
-    // Add position markers
-    if (position) {
-        // Note: We'd need position entry time to mark it properly
-        // For now, just showing in the info box
+    // Add position markers (Entry, TP, SL)
+    if (position && position.entry_price) {
+        // Entry marker
+        const entryLine = {
+            price: position.entry_price,
+            color: '#3b82f6',
+            lineWidth: 2,
+            lineStyle: 0, // Solid
+            axisLabelVisible: true,
+            title: '🎯 Entry',
+        };
+        series.createPriceLine(entryLine);
+        
+        // Take Profit marker
+        if (position.take_profit) {
+            const tpLine = {
+                price: position.take_profit,
+                color: '#10b981',
+                lineWidth: 2,
+                lineStyle: 0,
+                axisLabelVisible: true,
+                title: '✅ TP',
+            };
+            series.createPriceLine(tpLine);
+        }
+        
+        // Stop Loss marker
+        if (position.stop_loss) {
+            const slLine = {
+                price: position.stop_loss,
+                color: '#ef4444',
+                lineWidth: 2,
+                lineStyle: 0,
+                axisLabelVisible: true,
+                title: '❌ SL',
+            };
+            series.createPriceLine(slLine);
+        }
     }
     
     if (markers.length > 0) {
@@ -319,7 +515,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial update
     updateAll();
     
-    // Set up periodic updates
+    // Update Melbourne time immediately and every second
+    updateMelbourneTime();
+    setInterval(updateMelbourneTime, 1000);
+    
+    // Update refresh timer every second
+    setInterval(updateRefreshTimer, 1000);
+    
+    // Set up periodic updates for data
     setInterval(updateAll, UPDATE_INTERVAL);
     
     console.log('HunterZ Trading System - Ready');
