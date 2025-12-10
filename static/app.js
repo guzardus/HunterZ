@@ -430,7 +430,8 @@ async function updateMarketData() {
                 let infoHTML = '';
                 let labelHTML = '';
                 
-                // Check if there's a valid pending order for this symbol
+                // Check if there's a valid pending order for this specific symbol
+                // Note: data.pending_order is fetched per-symbol from backend
                 const hasPendingOrder = isPendingOrderValid(data.pending_order);
                 
                 // Helper function for distance formatting

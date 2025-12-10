@@ -132,13 +132,12 @@ def get_all_market_data():
                 entry_price = ob.get('ob_bottom', 0)
             
             # Calculate percentage distance from current price to entry
+            ob_copy['entry_price'] = entry_price
             if current_price > 0 and entry_price > 0:
                 distance_pct = ((entry_price - current_price) / current_price) * 100
                 ob_copy['distance_pct'] = round(distance_pct, 2)
-                ob_copy['entry_price'] = entry_price
             else:
                 ob_copy['distance_pct'] = 0
-                ob_copy['entry_price'] = entry_price
             
             obs_with_distance.append(ob_copy)
         
