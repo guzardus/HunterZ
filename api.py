@@ -120,5 +120,21 @@ def get_all_market_data():
         }
     return result
 
+@app.get("/api/metrics")
+def get_metrics():
+    """Get bot metrics and recent reconciliation log"""
+    metrics = state.bot_state.metrics
+    return {
+        "metrics": {
+            "pending_orders_count": metrics.pending_orders_count,
+            "open_exchange_orders_count": metrics.open_exchange_orders_count,
+            "placed_orders_count": metrics.placed_orders_count,
+            "cancelled_orders_count": metrics.cancelled_orders_count,
+            "filled_orders_count": metrics.filled_orders_count
+        },
+        "reconciliation_log": state.bot_state.reconciliation_log[:50],  # Last 50 entries
+        "pending_orders": len(state.bot_state.pending_orders)
+    }
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

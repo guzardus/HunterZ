@@ -28,9 +28,183 @@ def format_order_params(client, symbol, params):
         'take_profit': tp_price
     }
 
+def reconcile_live_orders(client):
+    """Reconcile exchange orders with persisted pending orders at startup.
+    
+    This function:
+    1. Fetches all open orders from the exchange
+    2. Matches them with persisted pending orders
+    3. Adds unmatched orders that align with current OBs
+    4. Cancels unmatched orders that don't align with strategy
+    """
+    print("\n=== Starting Order Reconciliation ===")
+    state.add_reconciliation_log("reconciliation_start", {"message": "Starting order reconciliation"})
+    
+    symbols = utils.get_trading_pairs()
+    all_exchange_orders = []
+    
+    # Fetch open orders for all symbols
+    for symbol in symbols:
+        try:
+            orders = client.get_open_orders(symbol)
+            all_exchange_orders.extend(orders)
+        except Exception as e:
+            print(f"Error fetching orders for {symbol}: {e}")
+    
+    print(f"Found {len(all_exchange_orders)} open orders on exchange")
+    state.bot_state.metrics.open_exchange_orders_count = len(all_exchange_orders)
+    
+    # Track matched order IDs
+    matched_order_ids = set()
+    
+    # Match exchange orders with pending orders
+    for order in all_exchange_orders:
+        order_id = order.get('id')
+        symbol = order.get('symbol')
+        order_type = order.get('type', '')
+        
+        # Check if it's a TP/SL order (reduceOnly)
+        is_tp_sl = order.get('reduceOnly', False) or order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET']
+        
+        # Check if matches a pending order
+        pending = state.get_pending_order(symbol)
+        if pending and pending.get('order_id') == order_id:
+            matched_order_ids.add(order_id)
+            print(f"✓ Matched order {order_id} for {symbol} with pending order")
+            state.add_reconciliation_log("order_matched", {
+                "order_id": order_id,
+                "symbol": symbol,
+                "message": "Exchange order matched with pending order"
+            })
+            continue
+        
+        # If not matched and not TP/SL, try to match with current OBs
+        if not is_tp_sl:
+            print(f"Found unmatched limit order {order_id} for {symbol}")
+            
+            # Fetch current OHLCV and detect OBs
+            try:
+                ohlcv = client.fetch_ohlcv(symbol)
+                if ohlcv:
+                    df = prepare_dataframe(ohlcv)
+                    obs = lux_algo.detect_order_blocks(df)
+                    
+                    order_price = float(order.get('price', 0))
+                    order_side = order.get('side', '').lower()
+                    
+                    # Try to match with an OB (0.5% tolerance)
+                    matched_ob = False
+                    for ob in obs:
+                        tolerance = 0.005  # 0.5% tolerance
+                        if ob['type'] == 'bullish' and order_side == 'buy':
+                            # Check if order price is near OB top
+                            if abs(order_price - ob['ob_top']) / ob['ob_top'] < tolerance:
+                                matched_ob = True
+                                break
+                        elif ob['type'] == 'bearish' and order_side == 'sell':
+                            # Check if order price is near OB bottom
+                            if abs(order_price - ob['ob_bottom']) / ob['ob_bottom'] < tolerance:
+                                matched_ob = True
+                                break
+                    
+                    if matched_ob:
+                        # Add to pending orders
+                        print(f"✓ Order {order_id} matches active OB, adding to tracking")
+                        state.add_pending_order(symbol, order_id, {
+                            'side': order_side,
+                            'quantity': float(order.get('amount', 0)),
+                            'entry_price': order_price,
+                            'stop_loss': 0,  # Will be set when filled
+                            'take_profit': 0,  # Will be set when filled
+                            'reconciled': True
+                        })
+                        state.add_reconciliation_log("order_added_from_ob", {
+                            "order_id": order_id,
+                            "symbol": symbol,
+                            "message": "Exchange order matched with active OB and added to tracking"
+                        })
+                        matched_order_ids.add(order_id)
+                    else:
+                        # Cancel unmatched order
+                        print(f"✗ Order {order_id} doesn't match any OB, canceling...")
+                        try:
+                            client.exchange.cancel_order(order_id, symbol)
+                            print(f"Cancelled orphaned order {order_id}")
+                            state.bot_state.metrics.cancelled_orders_count += 1
+                            state.add_reconciliation_log("order_cancelled", {
+                                "order_id": order_id,
+                                "symbol": symbol,
+                                "reason": "No matching OB found"
+                            })
+                        except Exception as e:
+                            print(f"Failed to cancel order {order_id}: {e}")
+            except Exception as e:
+                print(f"Error reconciling order {order_id}: {e}")
+        else:
+            # TP/SL orders are fine, just log them
+            matched_order_ids.add(order_id)
+            print(f"✓ Found TP/SL order {order_id} for {symbol}")
+            state.add_reconciliation_log("tp_sl_found", {
+                "order_id": order_id,
+                "symbol": symbol,
+                "message": "TP/SL order found on exchange"
+            })
+    
+    # Check for orphaned pending orders (in state but not on exchange)
+    orphaned_symbols = []
+    for symbol, pending in list(state.bot_state.pending_orders.items()):
+        order_id = pending.get('order_id')
+        if order_id not in matched_order_ids:
+            print(f"⚠ Pending order {order_id} for {symbol} not found on exchange")
+            # Try to fetch order status
+            try:
+                order_status = client.get_order_status(symbol, order_id)
+                if order_status:
+                    status = order_status.get('status')
+                    if status in ['filled', 'canceled', 'expired', 'rejected']:
+                        print(f"Order {order_id} is {status}, removing from pending")
+                        orphaned_symbols.append(symbol)
+                        state.add_reconciliation_log("orphaned_order_resolved", {
+                            "order_id": order_id,
+                            "symbol": symbol,
+                            "status": status,
+                            "message": f"Orphaned order found with status {status}"
+                        })
+                        if status == 'filled':
+                            state.bot_state.metrics.filled_orders_count += 1
+                else:
+                    print(f"Order {order_id} not found, removing from pending")
+                    orphaned_symbols.append(symbol)
+                    state.add_reconciliation_log("orphaned_order_removed", {
+                        "order_id": order_id,
+                        "symbol": symbol,
+                        "message": "Orphaned order not found on exchange, removed"
+                    })
+            except Exception as e:
+                print(f"Error checking orphaned order {order_id}: {e}")
+                orphaned_symbols.append(symbol)
+    
+    # Remove orphaned orders
+    for symbol in orphaned_symbols:
+        state.remove_pending_order(symbol)
+    
+    print(f"=== Reconciliation Complete: {len(matched_order_ids)} orders matched, {len(orphaned_symbols)} orphaned ===\n")
+    state.add_reconciliation_log("reconciliation_complete", {
+        "matched_orders": len(matched_order_ids),
+        "orphaned_orders": len(orphaned_symbols),
+        "message": "Order reconciliation completed"
+    })
+
 def run_bot_logic():
     print("Starting LuxAlgo Order Block Bot Logic...")
+    
+    # Initialize state and load persisted data
+    state.init()
+    
     client = BinanceClient()
+    
+    # Reconcile live orders before starting main loop
+    reconcile_live_orders(client)
     
     while True:
         try:
@@ -40,7 +214,11 @@ def run_bot_logic():
                 if pending:
                     order_status = client.get_order_status(symbol, pending['order_id'])
                     if order_status:
-                        # Check if order is filled
+                        original_amount = float(order_status.get('amount', 0))
+                        filled_amount = float(order_status.get('filled', 0))
+                        remaining_amount = original_amount - filled_amount
+                        
+                        # Check if order is fully filled
                         if order_status.get('status') == 'filled':
                             print(f"Limit order filled for {symbol}. Placing TP/SL orders...")
                             params = pending['params']
@@ -58,13 +236,44 @@ def run_bot_logic():
                             
                             if orders['sl_order'] and orders['tp_order']:
                                 print(f"TP/SL orders successfully placed for {symbol}")
+                                state.bot_state.metrics.filled_orders_count += 1
                             else:
                                 print(f"WARNING: Some TP/SL orders failed for {symbol}")
                             
                             # Remove from pending orders
                             state.remove_pending_order(symbol)
+                            
+                        # Handle partial fills
+                        elif filled_amount > 0 and remaining_amount > 0:
+                            print(f"Partial fill detected for {symbol}: {filled_amount}/{original_amount} filled")
+                            params = pending['params']
+                            
+                            # Place TP/SL for filled portion
+                            filled_qty = client.exchange.amount_to_precision(symbol, filled_amount)
+                            formatted = format_order_params(client, symbol, params)
+                            
+                            orders = client.place_sl_tp_orders(
+                                symbol, params['side'],
+                                filled_qty,
+                                formatted['stop_loss'],
+                                formatted['take_profit']
+                            )
+                            
+                            if orders['sl_order'] and orders['tp_order']:
+                                print(f"TP/SL placed for partial fill: {filled_qty}")
+                            
+                            # Update pending order with remaining quantity
+                            pending['params']['quantity'] = remaining_amount
+                            pending['partial_fill'] = True
+                            pending['filled_amount'] = filled_amount
+                            state.bot_state.pending_orders[symbol] = pending
+                            state.save_pending_orders()
+                            print(f"Updated pending order with remaining quantity: {remaining_amount}")
+                            
                         elif order_status.get('status') in ['canceled', 'expired', 'rejected']:
                             print(f"Limit order {order_status.get('status')} for {symbol}. Removing from pending.")
+                            if order_status.get('status') == 'canceled':
+                                state.bot_state.metrics.cancelled_orders_count += 1
                             state.remove_pending_order(symbol)
             
             # 2. Fetch Trading Pairs
@@ -144,7 +353,16 @@ def run_bot_logic():
                     continue
                 params['symbol'] = symbol
                 
-                # 6. Execute
+                # 6. Check if pending order exists before placing new order
+                if state.get_pending_order(symbol):
+                    print(f"Pending order exists for {symbol}, skipping new placement")
+                    state.add_reconciliation_log("placement_skipped", {
+                        "symbol": symbol,
+                        "reason": "Pending order already exists"
+                    })
+                    continue
+                
+                # 7. Execute - cancel existing orders and place new limit order
                 client.cancel_all_orders(symbol)
                 
                 # Format prices with proper precision
@@ -160,15 +378,14 @@ def run_bot_logic():
                     
                     # Store the order info for later TP/SL placement
                     state.add_pending_order(symbol, order['id'], params)
+                    state.bot_state.metrics.placed_orders_count += 1
             
-            # Decrease sleep time for more responsive UI updates? 
-            # Or keep it, as 30m candles don't change fast.
-            # But recent price update is nice.
-            time.sleep(60) # updates every 1 min
+            # Sleep for 2 minutes between cycles
+            time.sleep(120)
             
         except Exception as e:
             print(f"Top-level error: {e}")
-            time.sleep(60)
+            time.sleep(120)
 
 def start_bot_thread():
     t = threading.Thread(target=run_bot_logic, daemon=True)

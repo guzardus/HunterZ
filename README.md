@@ -12,6 +12,19 @@ A sophisticated cryptocurrency trading bot based on the LuxAlgo Order Block dete
   - UNI/USDT
   - DOT/USDT
   - BNB/USDT
+- **Persistent Order Tracking**: 
+  - Pending orders are saved to disk and persist across restarts
+  - Automatic reconciliation of exchange orders at startup
+  - Handles partial fills with automatic TP/SL placement
+- **Order Reconciliation**:
+  - At startup, bot fetches all open orders from exchange
+  - Matches orders with current strategy (order blocks)
+  - Cancels orphaned orders that don't match any active strategy
+- **Comprehensive Metrics**:
+  - Pending orders count
+  - Open exchange orders count
+  - Placed, cancelled, and filled orders tracking
+  - Recent reconciliation actions log
 - **TRON-Themed Frontend**: Sleek black background with red highlights and cyberpunk aesthetics
 - **Real-Time Charts**: TradingView lightweight charts showing:
   - 30-minute candlesticks
@@ -94,6 +107,7 @@ The bot implements the LuxAlgo Order Block strategy:
    - Fixed risk per trade (1% of balance)
    - Risk-reward ratio of 2:1
    - Automatic stop loss and take profit placement
+5. **Cycle Time**: Bot evaluates opportunities every 2 minutes (120 seconds)
 
 ## Frontend Features
 
@@ -120,6 +134,7 @@ The bot implements the LuxAlgo Order Block strategy:
 - `GET /api/trades` - Trade history
 - `GET /api/market-data/{symbol}` - Market data for specific pair
 - `GET /api/all-market-data` - Market data for all pairs
+- `GET /api/metrics` - Order metrics and reconciliation log
 
 ## Safety Features
 
@@ -128,6 +143,10 @@ The bot implements the LuxAlgo Order Block strategy:
 - Stop loss on every trade
 - Order cancellation before new entries
 - Error handling and logging
+- **Persistent state**: Pending orders saved to `data/pending_orders.json`
+- **Startup reconciliation**: Validates and reconciles all exchange orders at bot startup
+- **Orphan order handling**: Automatically cancels orders that don't match current strategy
+- **Partial fill handling**: Places TP/SL for partial fills and tracks remaining quantity
 
 ## Development
 
@@ -183,6 +202,40 @@ HunterZ/
 - Always start with testnet mode
 - Only trade with funds you can afford to lose
 - The authors are not responsible for any financial losses
+
+## Testing the New Features
+
+### Persistent State
+- Pending orders are automatically saved to `data/pending_orders.json`
+- Stop the bot and restart it to verify orders persist
+- Check the file to inspect persisted order data
+
+### Startup Reconciliation
+- When the bot starts, it will:
+  1. Load persisted pending orders from disk
+  2. Fetch all open orders from the exchange
+  3. Match orders with pending orders and current order blocks
+  4. Cancel orphaned orders that don't match strategy
+  5. Log all reconciliation actions
+- Check the console output for reconciliation logs
+- View the "Recent Reconciliation Actions" section in the UI
+
+### Metrics Dashboard
+- Access the dashboard at http://localhost:8000
+- View metrics in the header:
+  - Pending Orders: Count of orders being tracked
+  - Exchange Orders: Open orders on exchange (from last reconciliation)
+  - Placed: Total orders placed by the bot
+  - Cancelled: Total orders cancelled
+  - Filled: Total orders filled
+- Recent actions log shows the last 50 reconciliation events
+
+### Partial Fills
+- If an order is partially filled:
+  - TP/SL orders are placed for the filled portion
+  - The pending order is updated with remaining quantity
+  - Changes are persisted to disk
+- Monitor console logs for partial fill handling
 
 ## License
 

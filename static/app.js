@@ -191,6 +191,83 @@ async function updateStatus() {
     }
 }
 
+// Fetch and update metrics
+async function updateMetrics() {
+    try {
+        const response = await fetch('/api/metrics');
+        const data = await response.json();
+        
+        // Update metrics
+        const metrics = data.metrics;
+        
+        const pendingOrdersElement = document.getElementById('pending-orders-metric');
+        if (pendingOrdersElement) {
+            pendingOrdersElement.textContent = metrics.pending_orders_count;
+        }
+        
+        const exchangeOrdersElement = document.getElementById('exchange-orders-metric');
+        if (exchangeOrdersElement) {
+            exchangeOrdersElement.textContent = metrics.open_exchange_orders_count;
+        }
+        
+        const placedOrdersElement = document.getElementById('placed-orders-metric');
+        if (placedOrdersElement) {
+            placedOrdersElement.textContent = metrics.placed_orders_count;
+        }
+        
+        const cancelledOrdersElement = document.getElementById('cancelled-orders-metric');
+        if (cancelledOrdersElement) {
+            cancelledOrdersElement.textContent = metrics.cancelled_orders_count;
+        }
+        
+        const filledOrdersElement = document.getElementById('filled-orders-metric');
+        if (filledOrdersElement) {
+            filledOrdersElement.textContent = metrics.filled_orders_count;
+        }
+        
+        // Update recent actions log
+        const actionsListElement = document.getElementById('recent-actions-list');
+        if (actionsListElement && data.reconciliation_log) {
+            if (data.reconciliation_log.length > 0) {
+                actionsListElement.innerHTML = data.reconciliation_log.map(log => {
+                    const time = new Date(log.timestamp).toLocaleString('en-AU', {
+                        timeZone: 'Australia/Melbourne',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                    
+                    let actionClass = 'action-info';
+                    if (log.action.includes('cancelled')) {
+                        actionClass = 'action-warning';
+                    } else if (log.action.includes('matched') || log.action.includes('added')) {
+                        actionClass = 'action-success';
+                    }
+                    
+                    return `
+                        <div class="action-item ${actionClass}" style="padding: 10px; margin-bottom: 8px; border-left: 3px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.02);">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span class="label uppercase">${log.action.replace(/_/g, ' ')}</span>
+                                <span class="label" style="color: var(--white-muted);">${time}</span>
+                            </div>
+                            <div style="font-size: 0.9rem; color: var(--white-muted);">
+                                ${log.details.message || JSON.stringify(log.details)}
+                            </div>
+                            ${log.details.symbol ? `<div class="label" style="margin-top: 5px;">Symbol: ${log.details.symbol}</div>` : ''}
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                actionsListElement.innerHTML = '<div class="no-data">No recent actions</div>';
+            }
+        }
+    } catch (error) {
+        console.error('Error updating metrics:', error);
+    }
+}
+
 // Fetch and update wallet balance (not used in new design but keeping for compatibility)
 async function updateWallet() {
     try {
@@ -536,7 +613,8 @@ async function updateAll() {
         updateWallet(),
         updatePositions(),
         updateTrades(),
-        updateMarketData()
+        updateMarketData(),
+        updateMetrics()
     ]);
 }
 

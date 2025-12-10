@@ -97,3 +97,22 @@ class BinanceClient:
         tp_order = self.place_take_profit(symbol, sl_tp_side, amount, tp_price)
         
         return {'sl_order': sl_order, 'tp_order': tp_order}
+
+    def get_open_orders(self, symbol=None):
+        """Fetch open orders from the exchange.
+        
+        Args:
+            symbol: Optional symbol to filter orders. If None, fetches all open orders.
+            
+        Returns:
+            list: List of open orders
+        """
+        try:
+            if symbol:
+                orders = self.exchange.fetch_open_orders(symbol)
+            else:
+                orders = self.exchange.fetch_open_orders()
+            return orders
+        except Exception as e:
+            print(f"Error fetching open orders for {symbol if symbol else 'all symbols'}: {e}")
+            return []

@@ -1,6 +1,17 @@
 from typing import List, Dict, Any
 from dataclasses import dataclass, field
 import datetime
+import json
+import os
+
+@dataclass
+class Metrics:
+    """Metrics for tracking order activities"""
+    pending_orders_count: int = 0
+    open_exchange_orders_count: int = 0
+    placed_orders_count: int = 0
+    cancelled_orders_count: int = 0
+    filled_orders_count: int = 0
 
 @dataclass
 class BotState:
@@ -13,6 +24,9 @@ class BotState:
     trade_history: List[Dict] = field(default_factory=list)
     total_pnl: float = 0.0
     pending_orders: Dict[str, Dict] = field(default_factory=dict) # symbol -> order info with TP/SL params
+    orphaned_orders: List[Dict] = field(default_factory=list) # Orders found on exchange but not in state
+    reconciliation_log: List[Dict] = field(default_factory=list) # Log of reconciliation actions
+    metrics: Metrics = field(default_factory=Metrics)
 
 # Global instance
 bot_state = BotState()
@@ -78,12 +92,63 @@ def add_pending_order(symbol: str, order_id: str, params: Dict):
         'params': params,
         'timestamp': datetime.datetime.now().isoformat()
     }
+    bot_state.metrics.pending_orders_count = len(bot_state.pending_orders)
+    save_pending_orders()
 
 def remove_pending_order(symbol: str):
     """Remove a pending order once processed"""
     if symbol in bot_state.pending_orders:
         del bot_state.pending_orders[symbol]
+        bot_state.metrics.pending_orders_count = len(bot_state.pending_orders)
+        save_pending_orders()
 
 def get_pending_order(symbol: str):
     """Get pending order info for a symbol"""
     return bot_state.pending_orders.get(symbol)
+
+# Persistence functions
+PENDING_ORDERS_FILE = os.path.join(os.path.dirname(__file__), 'data', 'pending_orders.json')
+
+def save_pending_orders():
+    """Save pending orders to disk"""
+    try:
+        os.makedirs(os.path.dirname(PENDING_ORDERS_FILE), exist_ok=True)
+        with open(PENDING_ORDERS_FILE, 'w') as f:
+            json.dump(bot_state.pending_orders, f, indent=2)
+    except Exception as e:
+        print(f"WARNING: Failed to save pending orders: {e}")
+
+def load_pending_orders_on_startup():
+    """Load pending orders from disk"""
+    try:
+        if os.path.exists(PENDING_ORDERS_FILE):
+            with open(PENDING_ORDERS_FILE, 'r') as f:
+                loaded = json.load(f)
+                bot_state.pending_orders = loaded
+                bot_state.metrics.pending_orders_count = len(loaded)
+                print(f"Loaded {len(loaded)} pending orders from disk")
+        else:
+            print("No pending orders file found, starting fresh")
+    except json.JSONDecodeError as e:
+        print(f"WARNING: Corrupted pending orders file, starting fresh: {e}")
+        bot_state.pending_orders = {}
+    except Exception as e:
+        print(f"WARNING: Failed to load pending orders: {e}")
+        bot_state.pending_orders = {}
+
+def add_reconciliation_log(action: str, details: Dict):
+    """Add an entry to the reconciliation log"""
+    log_entry = {
+        'timestamp': datetime.datetime.now().isoformat(),
+        'action': action,
+        'details': details
+    }
+    bot_state.reconciliation_log.insert(0, log_entry)
+    # Keep only last 50 entries
+    bot_state.reconciliation_log = bot_state.reconciliation_log[:50]
+
+def init():
+    """Initialize state on startup"""
+    print("Initializing bot state...")
+    load_pending_orders_on_startup()
+    print("Bot state initialized")

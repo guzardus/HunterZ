@@ -50,3 +50,7 @@ htmlcov/
 # Temporary files
 /tmp/
 *.tmp
+
+# Data files (persistent state)
+/data/*.json
+!/data/.gitkeep
