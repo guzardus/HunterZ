@@ -107,8 +107,20 @@ def run_bot_logic():
                 print(f"Placing Order: {params['side']} {qty} @ {price}")
                 order = client.place_limit_order(symbol, params['side'], qty, price)
                 
-                # if order:
-                #     print(f"Order Placed ID: {order['id']}")
+                # Place Stop Loss and Take Profit orders
+                if order:
+                    print(f"Order Placed ID: {order['id']}")
+                    
+                    # Determine the side for SL/TP (opposite of entry)
+                    sl_tp_side = 'sell' if params['side'] == 'buy' else 'buy'
+                    
+                    # Place Stop Loss
+                    sl_price = client.exchange.price_to_precision(symbol, params['stop_loss'])
+                    sl_order = client.place_stop_loss(symbol, sl_tp_side, qty, sl_price)
+                    
+                    # Place Take Profit
+                    tp_price = client.exchange.price_to_precision(symbol, params['take_profit'])
+                    tp_order = client.place_take_profit(symbol, sl_tp_side, qty, tp_price)
             
             # Decrease sleep time for more responsive UI updates? 
             # Or keep it, as 30m candles don't change fast.
