@@ -111,7 +111,9 @@ def run_bot_logic():
                 if order:
                     print(f"Order Placed ID: {order['id']}")
                     
-                    # Determine the side for SL/TP (opposite of entry)
+                    # Determine the closing side for SL/TP orders
+                    # For a long position (buy entry), we close with a sell order
+                    # For a short position (sell entry), we close with a buy order
                     sl_tp_side = 'sell' if params['side'] == 'buy' else 'buy'
                     
                     # Place Stop Loss
