@@ -6,10 +6,10 @@
     <title>HunterZ - Order Block Trading System</title>
     <link rel="stylesheet" href="/static/style.css">
     <!-- LightweightCharts for candlestick charts -->
-    <!-- Try loading from CDN first, fallback to local mock for testing -->
+    <!-- Try loading from CDN first, fallback to local mock if CDN is blocked -->
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js" 
-            onerror="console.log('Loading fallback chart library'); var script = document.createElement('script'); script.src = '/static/lightweight-charts.js'; document.head.appendChild(script);"></script>
-    <script src="/static/lightweight-charts.js"></script>
+            onerror="console.log('CDN blocked, loading fallback chart library'); var script = document.createElement('script'); script.src = '/static/lightweight-charts.js'; document.head.appendChild(script);"></script>
+
 
 
 </head>

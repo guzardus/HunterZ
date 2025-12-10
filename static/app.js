@@ -14,7 +14,7 @@ const charts = {};
 const candlestickSeries = {};
 const orderBlockSeries = {};
 const markerSeries = {};
-const UPDATE_INTERVAL = 60000; // Update every 60 seconds
+const UPDATE_INTERVAL = 30000; // Update every 30 seconds for better responsiveness
 let lastUpdateTime = Date.now();
 let limitOrdersCount = 0;
 
@@ -116,7 +116,7 @@ function initializeCharts() {
 
             charts[symbolKey] = chart;
             candlestickSeries[symbolKey] = candleSeries;
-            orderBlockSeries[symbolKey] = [];
+            orderBlockSeries[symbolKey] = []; // Initialize order block series array
 
             // Make chart responsive
             new ResizeObserver(entries => {
@@ -235,8 +235,10 @@ async function updateTrades() {
                 });
                 
                 // Calculate P&L percentage
-                const pnlPercent = trade.entry_price && trade.pnl ? 
-                    ((trade.pnl / (trade.entry_price * (trade.size || 1))) * 100).toFixed(2) : '-';
+                let pnlPercent = '-';
+                if (trade.entry_price && trade.pnl && trade.size && trade.size > 0) {
+                    pnlPercent = ((trade.pnl / (trade.entry_price * trade.size)) * 100).toFixed(2);
+                }
                 
                 // Calculate duration
                 let duration = '-';
@@ -374,14 +376,16 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
     series.setMarkers([]);
     
     // Remove existing order block series
-    if (orderBlockSeries[symbolKey]) {
+    if (orderBlockSeries[symbolKey] && orderBlockSeries[symbolKey].length > 0) {
         orderBlockSeries[symbolKey].forEach(s => {
             try {
                 chart.removeSeries(s);
             } catch (e) {
-                // Series might already be removed
+                console.warn(`Could not remove series for ${symbolKey}:`, e.message);
             }
         });
+        orderBlockSeries[symbolKey] = [];
+    } else if (!orderBlockSeries[symbolKey]) {
         orderBlockSeries[symbolKey] = [];
     }
     
