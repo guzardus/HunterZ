@@ -3,193 +3,222 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HunterZ - Order Block Trading System</title>
+    <title>HUNTERZ | QUANTUM</title>
+    
+    <!-- Fonts: Inter (Clean UI) & Manrope (Elegant Headers) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500&family=Manrope:wght@200;300;400&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="/static/style.css">
     <!-- LightweightCharts for candlestick charts -->
     <!-- Try loading from CDN first, fallback to local mock if CDN is blocked -->
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js" 
             onerror="console.log('CDN blocked, loading fallback chart library'); var script = document.createElement('script'); script.src = '/static/lightweight-charts.js'; document.head.appendChild(script);"></script>
-
-
-
 </head>
 <body>
+    <!-- CANVAS BACKGROUND -->
+    <canvas id="bg-canvas"></canvas>
+
     <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="logo">
-                <div class="logo-emblem">
-                    <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <!-- Shield background -->
-                        <path d="M30 5 L50 12 L50 28 C50 40 42 50 30 55 C18 50 10 40 10 28 L10 12 Z" 
-                              fill="url(#gradient1)" stroke="#1e3a8a" stroke-width="1.5"/>
-                        
-                        <!-- Target circles -->
-                        <circle cx="30" cy="30" r="12" stroke="#ffffff" stroke-width="2" fill="none" opacity="0.8"/>
-                        <circle cx="30" cy="30" r="8" stroke="#ffffff" stroke-width="2" fill="none" opacity="0.6"/>
-                        <circle cx="30" cy="30" r="4" fill="#ffffff" opacity="0.9"/>
-                        
-                        <!-- Crosshair -->
-                        <line x1="30" y1="18" x2="30" y2="22" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"/>
-                        <line x1="30" y1="38" x2="30" y2="42" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"/>
-                        <line x1="18" y1="30" x2="22" y2="30" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"/>
-                        <line x1="38" y1="30" x2="42" y2="30" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"/>
-                        
-                        <!-- Lightning bolt for Z -->
-                        <path d="M32 24 L28 30 L31 30 L29 36 L33 30 L30 30 Z" 
-                              fill="#fbbf24" stroke="#f59e0b" stroke-width="0.5" opacity="0.95"/>
-                        
-                        <!-- Gradient definitions -->
-                        <defs>
-                            <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style="stop-color:#1e3a8a;stop-opacity:1" />
-                                <stop offset="50%" style="stop-color:#3b82f6;stop-opacity:1" />
-                                <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
-                            </linearGradient>
-                        </defs>
-                    </svg>
-                </div>
-                <div class="logo-text">
-                    <h1>HUNTER<span class="highlight">Z</span></h1>
-                    <p class="tagline">Order Block Trading System</p>
-                </div>
+        <!-- HEADER -->
+        <header>
+            <div class="brand">
+                <div class="uppercase label" style="margin-bottom: 10px;">Autonomous Protocol</div>
+                <h1>HUNTERZ</h1>
             </div>
-            <div class="status-bar">
-                <div class="status-item">
-                    <span class="label">USDT Demo Futures</span>
-                    <span id="balance" class="value">0.00 USDT</span>
+            
+            <div class="stats-row">
+                <div class="stat-block">
+                    <div class="label uppercase">Total Balance</div>
+                    <div class="stat-val value"><span id="total-balance">0.00</span> <span class="label" style="font-size: 0.6em;">USDT</span></div>
                 </div>
-                <div class="status-item">
-                    <span class="label">Unrealised P&L</span>
-                    <span id="unrealized-pnl" class="value">0.00 USDT</span>
+                <div class="stat-block">
+                    <div class="label uppercase">Unrealized P&L</div>
+                    <div class="stat-val value" id="unrealized-pnl">0.00</div>
                 </div>
-                <div class="status-item">
-                    <span class="label">Total Balance</span>
-                    <span id="total-balance" class="value">0.00 USDT</span>
-                </div>
-                <div class="status-item">
-                    <span class="label">Next Refresh</span>
-                    <span id="refresh-timer" class="value">60s</span>
-                </div>
-                <div class="status-item">
-                    <span class="label">Melbourne Time</span>
-                    <span id="melbourne-time" class="value">--:--:--</span>
+                <div class="stat-block">
+                    <div class="label uppercase">Next Cycle</div>
+                    <div class="stat-val value" id="refresh-timer" style="color: var(--white-muted);">60s</div>
                 </div>
             </div>
         </header>
 
-        <!-- Additional Info Section -->
-        <section class="info-section">
-            <div class="info-grid">
-                <div class="info-card">
-                    <h3>Active Positions</h3>
-                    <div class="value" id="active-positions-count">0</div>
-                </div>
-                <div class="info-card">
-                    <h3>Limit Orders Placed</h3>
-                    <div class="value" id="limit-orders-count">0</div>
-                </div>
-                <div class="info-card">
-                    <h3>Total P&L</h3>
-                    <div class="value" id="total-pnl">0.00 USDT</div>
-                </div>
-                <div class="info-card">
-                    <h3>Win Rate</h3>
-                    <div class="value" id="win-rate">0%</div>
-                </div>
+        <!-- METRICS -->
+        <div class="metrics-grid">
+            <div class="glass-card">
+                <div class="label uppercase">Active Positions</div>
+                <div class="stat-val value" id="active-positions-count" style="margin-top: 15px; font-size: 2rem;">0</div>
             </div>
-        </section>
+            <div class="glass-card">
+                <div class="label uppercase">Limit Orders</div>
+                <div class="stat-val value" id="limit-orders-count" style="margin-top: 15px; font-size: 2rem;">0</div>
+            </div>
+            <div class="glass-card">
+                <div class="label uppercase">Total P&L</div>
+                <div class="stat-val value" id="total-pnl" style="margin-top: 15px; font-size: 2rem;">0.00</div>
+            </div>
+            <div class="glass-card">
+                <div class="label uppercase">Win Rate</div>
+                <div class="stat-val value" id="win-rate" style="margin-top: 15px; font-size: 2rem;">0%</div>
+            </div>
+        </div>
 
-        <!-- Trading Charts Grid -->
-        <section class="charts-section">
-            <h2>Live Trading Pairs <span class="highlight">(30min TF - Order Blocks)</span></h2>
-            <div class="charts-grid">
-                <div class="chart-container">
+        <!-- MAIN FEED -->
+        <div class="feed-title">
+            MARKET FEED <span style="font-size: 0.8rem; color: var(--white-muted); margin-left: 15px;">30M TIMEFRAME</span>
+        </div>
+
+        <div class="charts-grid">
+                <div class="glass-card">
                     <div class="chart-header">
-                        <h3>BTC/USDT <span class="highlight">[30m]</span></h3>
-                        <span class="price" id="price-BTCUSDT">$0.00</span>
+                        <div>
+                            <div class="pair-title">BTC / USDT</div>
+                            <div class="label" id="info-BTCUSDT-label" style="margin-top: 8px;">Scanning...</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="price-main" id="price-BTCUSDT">$0.00</div>
+                        </div>
                     </div>
-                    <div id="chart-BTCUSDT" class="chart"></div>
+                    <div class="chart-container">
+                        <div id="chart-BTCUSDT" class="chart"></div>
+                    </div>
                     <div class="chart-info" id="info-BTCUSDT">
                         <div class="no-data">Waiting for data...</div>
                     </div>
                 </div>
-                <div class="chart-container">
+                <div class="glass-card">
                     <div class="chart-header">
-                        <h3>ETH/USDT <span class="highlight">[30m]</span></h3>
-                        <span class="price" id="price-ETHUSDT">$0.00</span>
+                        <div>
+                            <div class="pair-title">ETH / USDT</div>
+                            <div class="label" id="info-ETHUSDT-label" style="margin-top: 8px;">Scanning...</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="price-main" id="price-ETHUSDT">$0.00</div>
+                        </div>
                     </div>
-                    <div id="chart-ETHUSDT" class="chart"></div>
+                    <div class="chart-container">
+                        <div id="chart-ETHUSDT" class="chart"></div>
+                    </div>
                     <div class="chart-info" id="info-ETHUSDT">
                         <div class="no-data">Waiting for data...</div>
                     </div>
                 </div>
-                <div class="chart-container">
+                <div class="glass-card">
                     <div class="chart-header">
-                        <h3>SOL/USDT <span class="highlight">[30m]</span></h3>
-                        <span class="price" id="price-SOLUSDT">$0.00</span>
+                        <div>
+                            <div class="pair-title">SOL / USDT</div>
+                            <div class="label" id="info-SOLUSDT-label" style="margin-top: 8px;">Scanning...</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="price-main" id="price-SOLUSDT">$0.00</div>
+                        </div>
                     </div>
-                    <div id="chart-SOLUSDT" class="chart"></div>
+                    <div class="chart-container">
+                        <div id="chart-SOLUSDT" class="chart"></div>
+                    </div>
                     <div class="chart-info" id="info-SOLUSDT">
                         <div class="no-data">Waiting for data...</div>
                     </div>
                 </div>
-                <div class="chart-container">
+                <div class="glass-card">
                     <div class="chart-header">
-                        <h3>UNI/USDT <span class="highlight">[30m]</span></h3>
-                        <span class="price" id="price-UNIUSDT">$0.00</span>
+                        <div>
+                            <div class="pair-title">UNI / USDT</div>
+                            <div class="label" id="info-UNIUSDT-label" style="margin-top: 8px;">Scanning...</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="price-main" id="price-UNIUSDT">$0.00</div>
+                        </div>
                     </div>
-                    <div id="chart-UNIUSDT" class="chart"></div>
+                    <div class="chart-container">
+                        <div id="chart-UNIUSDT" class="chart"></div>
+                    </div>
                     <div class="chart-info" id="info-UNIUSDT">
                         <div class="no-data">Waiting for data...</div>
                     </div>
                 </div>
-                <div class="chart-container">
+                <div class="glass-card">
                     <div class="chart-header">
-                        <h3>DOT/USDT <span class="highlight">[30m]</span></h3>
-                        <span class="price" id="price-DOTUSDT">$0.00</span>
+                        <div>
+                            <div class="pair-title">DOT / USDT</div>
+                            <div class="label" id="info-DOTUSDT-label" style="margin-top: 8px;">Scanning...</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="price-main" id="price-DOTUSDT">$0.00</div>
+                        </div>
                     </div>
-                    <div id="chart-DOTUSDT" class="chart"></div>
+                    <div class="chart-container">
+                        <div id="chart-DOTUSDT" class="chart"></div>
+                    </div>
                     <div class="chart-info" id="info-DOTUSDT">
                         <div class="no-data">Waiting for data...</div>
                     </div>
                 </div>
-                <div class="chart-container">
+                <div class="glass-card">
                     <div class="chart-header">
-                        <h3>BNB/USDT <span class="highlight">[30m]</span></h3>
-                        <span class="price" id="price-BNBUSDT">$0.00</span>
+                        <div>
+                            <div class="pair-title">BNB / USDT</div>
+                            <div class="label" id="info-BNBUSDT-label" style="margin-top: 8px;">Scanning...</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="price-main" id="price-BNBUSDT">$0.00</div>
+                        </div>
                     </div>
-                    <div id="chart-BNBUSDT" class="chart"></div>
+                    <div class="chart-container">
+                        <div id="chart-BNBUSDT" class="chart"></div>
+                    </div>
                     <div class="chart-info" id="info-BNBUSDT">
                         <div class="no-data">Waiting for data...</div>
                     </div>
                 </div>
-                <div class="chart-container">
+                <div class="glass-card">
                     <div class="chart-header">
-                        <h3>ADA/USDT <span class="highlight">[30m]</span></h3>
-                        <span class="price" id="price-ADAUSDT">$0.00</span>
+                        <div>
+                            <div class="pair-title">ADA / USDT</div>
+                            <div class="label" id="info-ADAUSDT-label" style="margin-top: 8px;">Scanning...</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="price-main" id="price-ADAUSDT">$0.00</div>
+                        </div>
                     </div>
-                    <div id="chart-ADAUSDT" class="chart"></div>
+                    <div class="chart-container">
+                        <div id="chart-ADAUSDT" class="chart"></div>
+                    </div>
                     <div class="chart-info" id="info-ADAUSDT">
                         <div class="no-data">Waiting for data...</div>
                     </div>
                 </div>
-                <div class="chart-container">
+                <div class="glass-card">
                     <div class="chart-header">
-                        <h3>LTC/USDT <span class="highlight">[30m]</span></h3>
-                        <span class="price" id="price-LTCUSDT">$0.00</span>
+                        <div>
+                            <div class="pair-title">LTC / USDT</div>
+                            <div class="label" id="info-LTCUSDT-label" style="margin-top: 8px;">Scanning...</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="price-main" id="price-LTCUSDT">$0.00</div>
+                        </div>
                     </div>
-                    <div id="chart-LTCUSDT" class="chart"></div>
+                    <div class="chart-container">
+                        <div id="chart-LTCUSDT" class="chart"></div>
+                    </div>
                     <div class="chart-info" id="info-LTCUSDT">
                         <div class="no-data">Waiting for data...</div>
                     </div>
                 </div>
-                <div class="chart-container">
+                <div class="glass-card">
                     <div class="chart-header">
-                        <h3>AVAX/USDT <span class="highlight">[30m]</span></h3>
-                        <span class="price" id="price-AVAXUSDT">$0.00</span>
+                        <div>
+                            <div class="pair-title">AVAX / USDT</div>
+                            <div class="label" id="info-AVAXUSDT-label" style="margin-top: 8px;">Scanning...</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="price-main" id="price-AVAXUSDT">$0.00</div>
+                        </div>
                     </div>
-                    <div id="chart-AVAXUSDT" class="chart"></div>
+                    <div class="chart-container">
+                        <div id="chart-AVAXUSDT" class="chart"></div>
+                    </div>
                     <div class="chart-info" id="info-AVAXUSDT">
                         <div class="no-data">Waiting for data...</div>
                     </div>
@@ -199,8 +228,8 @@
 
         <!-- Active Positions -->
         <section class="positions-section">
-            <h2>Active Positions</h2>
-            <div class="table-container">
+            <div class="feed-title" style="margin-bottom: 1.5rem;">ACTIVE POSITIONS</div>
+            <div class="glass-card">
                 <table id="positions-table">
                     <thead>
                         <tr>
@@ -226,8 +255,8 @@
 
         <!-- Trade History -->
         <section class="trades-section">
-            <h2>Trade History</h2>
-            <div class="table-container">
+            <div class="feed-title" style="margin-bottom: 1.5rem;">TRADE HISTORY</div>
+            <div class="glass-card">
                 <table id="trades-table">
                     <thead>
                         <tr>

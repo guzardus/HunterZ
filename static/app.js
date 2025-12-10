@@ -36,12 +36,18 @@ function getMelbourneTime() {
 function updateRefreshTimer() {
     const elapsed = Date.now() - lastUpdateTime;
     const remaining = Math.max(0, Math.ceil((UPDATE_INTERVAL - elapsed) / 1000));
-    document.getElementById('refresh-timer').textContent = `${remaining}s`;
+    const timerElement = document.getElementById('refresh-timer');
+    if (timerElement) {
+        timerElement.textContent = `${remaining}s`;
+    }
 }
 
-// Update Melbourne time
+// Update Melbourne time (no longer displayed in new design)
 function updateMelbourneTime() {
-    document.getElementById('melbourne-time').textContent = getMelbourneTime();
+    const timeElement = document.getElementById('melbourne-time');
+    if (timeElement) {
+        timeElement.textContent = getMelbourneTime();
+    }
 }
 
 // Initialize charts with Ethereum.org style colors
@@ -65,56 +71,56 @@ function initializeCharts() {
         if (chartElement) {
             const chart = LightweightCharts.createChart(chartElement, {
                 width: chartElement.clientWidth,
-                height: 300,
+                height: 180,
                 layout: {
                     background: { 
                         type: 'solid',
-                        color: 'rgba(255, 255, 255, 0.5)'
+                        color: 'transparent'
                     },
-                    textColor: '#475569',
+                    textColor: 'rgba(255, 255, 255, 0.6)',
                 },
                 grid: {
                     vertLines: { 
-                        color: 'rgba(59, 130, 246, 0.05)',
+                        color: 'rgba(255, 255, 255, 0.02)',
                         style: 1,
                     },
                     horzLines: { 
-                        color: 'rgba(59, 130, 246, 0.05)',
+                        color: 'rgba(255, 255, 255, 0.05)',
                         style: 1,
                     },
                 },
                 crosshair: {
                     mode: LightweightCharts.CrosshairMode.Normal,
                     vertLine: {
-                        color: 'rgba(59, 130, 246, 0.4)',
+                        color: 'rgba(255, 255, 255, 0.2)',
                         width: 1,
                         style: 2,
                     },
                     horzLine: {
-                        color: 'rgba(59, 130, 246, 0.4)',
+                        color: 'rgba(255, 255, 255, 0.2)',
                         width: 1,
                         style: 2,
                     },
                 },
                 rightPriceScale: {
-                    borderColor: 'rgba(59, 130, 246, 0.2)',
-                    textColor: '#475569',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    textColor: 'rgba(255, 255, 255, 0.6)',
                 },
                 timeScale: {
-                    borderColor: 'rgba(59, 130, 246, 0.2)',
-                    textColor: '#475569',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    textColor: 'rgba(255, 255, 255, 0.6)',
                     timeVisible: true,
                     secondsVisible: false,
                 },
             });
 
             const candleSeries = chart.addCandlestickSeries({
-                upColor: '#10b981',
-                downColor: '#ef4444',
-                borderUpColor: '#10b981',
-                borderDownColor: '#ef4444',
-                wickUpColor: '#10b981',
-                wickDownColor: '#ef4444',
+                upColor: '#FFFFFF',
+                downColor: '#F43F5E',
+                borderUpColor: '#FFFFFF',
+                borderDownColor: '#F43F5E',
+                wickUpColor: '#FFFFFF',
+                wickDownColor: '#F43F5E',
             });
 
             charts[symbolKey] = chart;
@@ -148,19 +154,36 @@ async function updateStatus() {
         }
         
         // Update header values
-        document.getElementById('balance').textContent = `${data.balance.toFixed(2)} USDT`;
-        document.getElementById('unrealized-pnl').textContent = `${totalUnrealizedPnL.toFixed(2)} USDT`;
-        document.getElementById('unrealized-pnl').className = totalUnrealizedPnL >= 0 ? 'value positive' : 'value negative';
+        const balanceElement = document.getElementById('balance');
+        if (balanceElement) {
+            balanceElement.textContent = `${data.balance.toFixed(2)} USDT`;
+        }
+        
+        const unrealizedPnlElement = document.getElementById('unrealized-pnl');
+        if (unrealizedPnlElement) {
+            unrealizedPnlElement.textContent = `${totalUnrealizedPnL.toFixed(2)}`;
+            unrealizedPnlElement.className = totalUnrealizedPnL >= 0 ? 'stat-val value text-green' : 'stat-val value text-red';
+        }
         
         // Calculate total balance (wallet + unrealized P&L)
         const totalBalance = data.balance + totalUnrealizedPnL;
-        document.getElementById('total-balance').textContent = `${totalBalance.toFixed(2)} USDT`;
-        document.getElementById('total-balance').className = totalBalance >= data.balance ? 'value positive' : 'value negative';
+        const totalBalanceElement = document.getElementById('total-balance');
+        if (totalBalanceElement) {
+            totalBalanceElement.textContent = `${totalBalance.toFixed(2)}`;
+            totalBalanceElement.className = totalBalance >= data.balance ? 'value' : 'value text-red';
+        }
         
         // Update additional info
-        document.getElementById('active-positions-count').textContent = data.active_positions;
-        document.getElementById('total-pnl').textContent = `${data.total_pnl.toFixed(2)} USDT`;
-        document.getElementById('total-pnl').className = data.total_pnl >= 0 ? 'value positive' : 'value negative';
+        const activePositionsElement = document.getElementById('active-positions-count');
+        if (activePositionsElement) {
+            activePositionsElement.textContent = data.active_positions;
+        }
+        
+        const totalPnlElement = document.getElementById('total-pnl');
+        if (totalPnlElement) {
+            totalPnlElement.textContent = `${data.total_pnl.toFixed(2)}`;
+            totalPnlElement.className = data.total_pnl >= 0 ? 'stat-val value text-green' : 'stat-val value text-red';
+        }
         
         lastUpdateTime = Date.now();
     } catch (error) {
@@ -224,8 +247,11 @@ async function updateTrades() {
             const closedTrades = data.trades.filter(t => t.status === 'CLOSED' || t.pnl !== undefined);
             const winningTrades = closedTrades.filter(t => t.pnl > 0);
             const winRate = closedTrades.length > 0 ? (winningTrades.length / closedTrades.length * 100).toFixed(1) : 0;
-            document.getElementById('win-rate').textContent = `${winRate}%`;
-            document.getElementById('win-rate').className = winRate >= 50 ? 'value positive' : 'value negative';
+            const winRateElement = document.getElementById('win-rate');
+            if (winRateElement) {
+                winRateElement.textContent = `${winRate}%`;
+                winRateElement.className = winRate >= 50 ? 'stat-val value text-green' : 'stat-val value text-red';
+            }
             
             tbody.innerHTML = data.trades.slice(0, 20).map(trade => {
                 // Convert to Melbourne time
@@ -273,7 +299,10 @@ async function updateTrades() {
             }).join('');
         } else {
             tbody.innerHTML = '<tr><td colspan="10" class="no-data">No trades yet</td></tr>';
-            document.getElementById('win-rate').textContent = '0%';
+            const winRateElement = document.getElementById('win-rate');
+            if (winRateElement) {
+                winRateElement.textContent = '0%';
+            }
         }
     } catch (error) {
         console.error('Error updating trades:', error);
@@ -361,7 +390,10 @@ async function updateMarketData() {
         }
         
         // Update limit orders count
-        document.getElementById('limit-orders-count').textContent = limitOrdersCount;
+        const limitOrdersElement = document.getElementById('limit-orders-count');
+        if (limitOrdersElement) {
+            limitOrdersElement.textContent = limitOrdersCount;
+        }
         
     } catch (error) {
         console.error('Error updating market data:', error);
@@ -400,7 +432,7 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
         
         // Create a line series for the order block zone
         const lineSeries = chart.addLineSeries({
-            color: ob.type === 'bullish' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+            color: ob.type === 'bullish' ? 'rgba(74, 222, 128, 0.2)' : 'rgba(244, 63, 94, 0.2)',
             lineWidth: 0,
             lastValueVisible: false,
             priceLineVisible: false,
@@ -409,7 +441,7 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
         // Draw the zone using price lines
         const priceLineTop = {
             price: ob.ob_top,
-            color: ob.type === 'bullish' ? '#10b981' : '#ef4444',
+            color: ob.type === 'bullish' ? '#4ADE80' : '#F43F5E',
             lineWidth: 1,
             lineStyle: 2, // Dashed
             axisLabelVisible: true,
@@ -418,7 +450,7 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
         
         const priceLineBottom = {
             price: ob.ob_bottom,
-            color: ob.type === 'bullish' ? '#10b981' : '#ef4444',
+            color: ob.type === 'bullish' ? '#4ADE80' : '#F43F5E',
             lineWidth: 1,
             lineStyle: 2, // Dashed
             axisLabelVisible: true,
@@ -435,7 +467,7 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
             markers.push({
                 time: ob.time,
                 position: 'belowBar',
-                color: '#10b981',
+                color: '#4ADE80',
                 shape: 'arrowUp',
                 text: `Bullish OB`,
                 size: 1
@@ -444,7 +476,7 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
             markers.push({
                 time: ob.time,
                 position: 'aboveBar',
-                color: '#ef4444',
+                color: '#F43F5E',
                 shape: 'arrowDown',
                 text: `Bearish OB`,
                 size: 1
@@ -457,7 +489,7 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
         // Entry marker
         const entryLine = {
             price: position.entry_price,
-            color: '#3b82f6',
+            color: '#FFFFFF',
             lineWidth: 2,
             lineStyle: 0, // Solid
             axisLabelVisible: true,
@@ -469,7 +501,7 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
         if (position.take_profit) {
             const tpLine = {
                 price: position.take_profit,
-                color: '#10b981',
+                color: '#4ADE80',
                 lineWidth: 2,
                 lineStyle: 0,
                 axisLabelVisible: true,
@@ -482,7 +514,7 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
         if (position.stop_loss) {
             const slLine = {
                 price: position.stop_loss,
-                color: '#ef4444',
+                color: '#F43F5E',
                 lineWidth: 2,
                 lineStyle: 0,
                 axisLabelVisible: true,
@@ -537,3 +569,104 @@ window.addEventListener('resize', () => {
         chart.resize();
     });
 });
+
+// ========================================
+// 3D PARTICLE CANVAS BACKGROUND
+// ========================================
+const canvas = document.getElementById('bg-canvas');
+if (canvas) {
+    const ctx = canvas.getContext('2d');
+
+    let width, height;
+    let particles = [];
+    const PARTICLE_COUNT = 3000;
+
+    function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    class Point {
+        constructor() {
+            this.reset();
+        }
+
+        reset() {
+            this.theta = Math.random() * Math.PI * 2;
+            this.phi = Math.random() * Math.PI;
+            this.baseRadius = (Math.random() * 500) + 900; 
+            this.x = 0;
+            this.y = 0;
+            this.z = 0;
+            this.size = Math.random() * 1.5;
+        }
+
+        update(time) {
+            // Reduced multiplier for gentler waves
+            let wave1 = Math.sin(this.theta * 3 + time * 0.5) * 30; 
+            let wave2 = Math.cos(this.phi * 2 + time * 0.3) * 30;
+
+            let currentRadius = this.baseRadius + wave1 + wave2;
+
+            this.x = currentRadius * Math.sin(this.phi) * Math.cos(this.theta);
+            this.y = currentRadius * Math.sin(this.phi) * Math.sin(this.theta);
+            this.z = currentRadius * Math.cos(this.phi);
+        }
+    }
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        particles.push(new Point());
+    }
+
+    let time = 0;
+
+    function animate() {
+        ctx.clearRect(0, 0, width, height);
+        
+        // SIGNIFICANTLY SLOWED DOWN
+        time += 0.0008; 
+
+        const cx = width / 2;
+        const cy = height / 2;
+
+        // Very slow rotation
+        let rotX = time * 0.1;
+        let rotY = time * 0.12;
+
+        ctx.fillStyle = '#FFFFFF';
+
+        particles.forEach(p => {
+            p.update(time);
+
+            let x = p.x;
+            let y = p.y;
+            let z = p.z;
+
+            let x1 = x * Math.cos(rotY) - z * Math.sin(rotY);
+            let z1 = x * Math.sin(rotY) + z * Math.cos(rotY);
+
+            let y2 = y * Math.cos(rotX) - z1 * Math.sin(rotX);
+            let z2 = y * Math.sin(rotX) + z1 * Math.cos(rotX);
+
+            let fov = 1200; 
+            let scale = fov / (fov + z2); 
+            let x2d = cx + x1 * scale;
+            let y2d = cy + y2 * scale;
+
+            if (scale > 0) {
+                let alpha = Math.max(0, (scale - 0.2) * 0.5);
+                ctx.globalAlpha = alpha;
+                ctx.beginPath();
+                ctx.arc(x2d, y2d, p.size * scale, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+
+        requestAnimationFrame(animate);
+    }
+
+    animate();
+}
