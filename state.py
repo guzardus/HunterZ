@@ -12,6 +12,7 @@ class BotState:
     ohlcv_data: Dict[str, List[Dict]] = field(default_factory=dict) # symbol -> recent data for charting
     trade_history: List[Dict] = field(default_factory=list)
     total_pnl: float = 0.0
+    pending_orders: Dict[str, Dict] = field(default_factory=dict) # symbol -> order info with TP/SL params
 
 # Global instance
 bot_state = BotState()
@@ -69,3 +70,20 @@ def add_trade(trade: Dict):
 def update_total_pnl(pnl: float):
     """Update total PnL"""
     bot_state.total_pnl = pnl
+
+def add_pending_order(symbol: str, order_id: str, params: Dict):
+    """Track a pending limit order with its intended TP/SL parameters"""
+    bot_state.pending_orders[symbol] = {
+        'order_id': order_id,
+        'params': params,
+        'timestamp': datetime.datetime.now().isoformat()
+    }
+
+def remove_pending_order(symbol: str):
+    """Remove a pending order once processed"""
+    if symbol in bot_state.pending_orders:
+        del bot_state.pending_orders[symbol]
+
+def get_pending_order(symbol: str):
+    """Get pending order info for a symbol"""
+    return bot_state.pending_orders.get(symbol)

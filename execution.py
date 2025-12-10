@@ -79,3 +79,21 @@ class BinanceClient:
         except Exception as e:
             print(f"Error placing TP for {symbol}: {e}")
             return None
+
+    def get_order_status(self, symbol, order_id):
+        """Check the status of an order."""
+        try:
+            order = self.exchange.fetch_order(order_id, symbol)
+            return order
+        except Exception as e:
+            print(f"Error fetching order status for {symbol}: {e}")
+            return None
+
+    def place_sl_tp_orders(self, symbol, side, amount, sl_price, tp_price):
+        """Place both Stop Loss and Take Profit orders together."""
+        sl_tp_side = 'sell' if side == 'buy' else 'buy'
+        
+        sl_order = self.place_stop_loss(symbol, sl_tp_side, amount, sl_price)
+        tp_order = self.place_take_profit(symbol, sl_tp_side, amount, tp_price)
+        
+        return {'sl_order': sl_order, 'tp_order': tp_order}
