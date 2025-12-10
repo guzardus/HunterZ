@@ -386,6 +386,15 @@ async function updateTrades() {
     }
 }
 
+// Helper function to validate pending order object
+function isPendingOrderValid(pendingOrder) {
+    return pendingOrder && 
+           typeof pendingOrder === 'object' && 
+           Object.keys(pendingOrder).length > 0 &&
+           pendingOrder.params &&
+           typeof pendingOrder.params === 'object';
+}
+
 // Update chart with market data and draw order blocks
 async function updateMarketData() {
     try {
@@ -421,8 +430,8 @@ async function updateMarketData() {
                 let infoHTML = '';
                 let labelHTML = '';
                 
-                // Check if there's a pending order for this symbol
-                const hasPendingOrder = data.pending_order && typeof data.pending_order === 'object' && Object.keys(data.pending_order).length > 0;
+                // Check if there's a valid pending order for this symbol
+                const hasPendingOrder = isPendingOrderValid(data.pending_order);
                 
                 // Helper function for distance formatting
                 const formatDistance = (distancePct) => {
@@ -499,7 +508,7 @@ async function updateMarketData() {
                 }
                 
                 // Show pending order info if exists
-                if (hasPendingOrder && data.pending_order.params) {
+                if (hasPendingOrder) {
                     const params = data.pending_order.params;
                     infoHTML += `<div class="ob-info" style="background: rgba(255,255,255,0.05);">
                         📋 Limit Order: ${params.side ? params.side.toUpperCase() : 'N/A'} @ $${params.entry_price ? params.entry_price.toFixed(2) : 'N/A'}

@@ -104,7 +104,14 @@ def get_market_data(symbol: str):
 
 @app.get("/api/all-market-data")
 def get_all_market_data():
-    """Get market data for all trading pairs with order block distance calculations"""
+    """Get market data for all trading pairs with order block distance calculations.
+    
+    Returns market data including:
+    - OHLCV data for charts
+    - Order blocks with calculated distance percentages from current price
+    - Current positions
+    - Pending orders (if any)
+    """
     result = {}
     for symbol in config.TRADING_PAIRS:
         ohlcv = state.bot_state.ohlcv_data.get(symbol, [])
