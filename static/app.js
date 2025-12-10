@@ -7,14 +7,17 @@ const TRADING_PAIRS = [
     'SOL/USDT',
     'UNI/USDT',
     'DOT/USDT',
-    'BNB/USDT'
+    'BNB/USDT',
+    'ADA/USDT',
+    'LTC/USDT',
+    'AVAX/USDT'
 ];
 
 const charts = {};
 const candlestickSeries = {};
 const orderBlockSeries = {};
 const markerSeries = {};
-const UPDATE_INTERVAL = 30000; // Update every 30 seconds for better responsiveness
+const UPDATE_INTERVAL = 300000; // Update every 5 minutes (300 seconds)
 let lastUpdateTime = Date.now();
 let limitOrdersCount = 0;
 

@@ -24,5 +24,8 @@ TRADING_PAIRS = [
     'SOL/USDT',
     'UNI/USDT',
     'DOT/USDT',
-    'BNB/USDT'
+    'BNB/USDT',
+    'ADA/USDT',
+    'LTC/USDT',
+    'AVAX/USDT'
 ]
