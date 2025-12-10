@@ -422,19 +422,25 @@ async function updateMarketData() {
                 let labelHTML = '';
                 
                 // Check if there's a pending order for this symbol
-                const hasPendingOrder = data.pending_order !== null && data.pending_order !== undefined;
+                const hasPendingOrder = data.pending_order && typeof data.pending_order === 'object' && Object.keys(data.pending_order).length > 0;
+                
+                // Helper function for distance formatting
+                const formatDistance = (distancePct) => {
+                    const sign = distancePct > 0 ? '+' : '';
+                    const color = distancePct > 0 ? 'var(--signal-green)' : 'var(--signal-red)';
+                    return { sign, color };
+                };
                 
                 // Show bullish order blocks with distance
                 if (bullishOBs.length > 0) {
                     bullishOBs.forEach((ob, index) => {
-                        const distanceSign = ob.distance_pct > 0 ? '+' : '';
-                        const distanceColor = ob.distance_pct > 0 ? 'var(--signal-green)' : 'var(--signal-red)';
+                        const { sign, color } = formatDistance(ob.distance_pct);
                         const orderIndicator = hasPendingOrder ? '📋 ' : '';
                         
                         infoHTML += `<div class="ob-info bullish">
                             🟢 ${orderIndicator}Bullish OB @ $${ob.entry_price ? ob.entry_price.toFixed(2) : 'N/A'}
-                            <span style="color: ${distanceColor}; margin-left: 8px; font-weight: 500;">
-                                ${distanceSign}${ob.distance_pct}%
+                            <span style="color: ${color}; margin-left: 8px; font-weight: 500;">
+                                ${sign}${ob.distance_pct}%
                             </span>
                         </div>`;
                         
@@ -451,14 +457,13 @@ async function updateMarketData() {
                 // Show bearish order blocks with distance
                 if (bearishOBs.length > 0) {
                     bearishOBs.forEach((ob, index) => {
-                        const distanceSign = ob.distance_pct > 0 ? '+' : '';
-                        const distanceColor = ob.distance_pct > 0 ? 'var(--signal-green)' : 'var(--signal-red)';
+                        const { sign, color } = formatDistance(ob.distance_pct);
                         const orderIndicator = hasPendingOrder ? '📋 ' : '';
                         
                         infoHTML += `<div class="ob-info bearish">
                             🔴 ${orderIndicator}Bearish OB @ $${ob.entry_price ? ob.entry_price.toFixed(2) : 'N/A'}
-                            <span style="color: ${distanceColor}; margin-left: 8px; font-weight: 500;">
-                                ${distanceSign}${ob.distance_pct}%
+                            <span style="color: ${color}; margin-left: 8px; font-weight: 500;">
+                                ${sign}${ob.distance_pct}%
                             </span>
                         </div>`;
                         
@@ -494,13 +499,11 @@ async function updateMarketData() {
                 }
                 
                 // Show pending order info if exists
-                if (hasPendingOrder) {
+                if (hasPendingOrder && data.pending_order.params) {
                     const params = data.pending_order.params;
-                    if (params) {
-                        infoHTML += `<div class="ob-info" style="background: rgba(255,255,255,0.05);">
-                            📋 Limit Order: ${params.side ? params.side.toUpperCase() : 'N/A'} @ $${params.entry_price ? params.entry_price.toFixed(2) : 'N/A'}
-                        </div>`;
-                    }
+                    infoHTML += `<div class="ob-info" style="background: rgba(255,255,255,0.05);">
+                        📋 Limit Order: ${params.side ? params.side.toUpperCase() : 'N/A'} @ $${params.entry_price ? params.entry_price.toFixed(2) : 'N/A'}
+                    </div>`;
                 }
                 
                 infoElement.innerHTML = infoHTML || '<div class="no-data">No order blocks detected</div>';
