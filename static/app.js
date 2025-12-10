@@ -36,12 +36,18 @@ function getMelbourneTime() {
 function updateRefreshTimer() {
     const elapsed = Date.now() - lastUpdateTime;
     const remaining = Math.max(0, Math.ceil((UPDATE_INTERVAL - elapsed) / 1000));
-    document.getElementById('refresh-timer').textContent = `${remaining}s`;
+    const timerElement = document.getElementById('refresh-timer');
+    if (timerElement) {
+        timerElement.textContent = `${remaining}s`;
+    }
 }
 
-// Update Melbourne time
+// Update Melbourne time (no longer displayed in new design)
 function updateMelbourneTime() {
-    document.getElementById('melbourne-time').textContent = getMelbourneTime();
+    const timeElement = document.getElementById('melbourne-time');
+    if (timeElement) {
+        timeElement.textContent = getMelbourneTime();
+    }
 }
 
 // Initialize charts with Ethereum.org style colors
@@ -148,19 +154,36 @@ async function updateStatus() {
         }
         
         // Update header values
-        document.getElementById('balance').textContent = `${data.balance.toFixed(2)} USDT`;
-        document.getElementById('unrealized-pnl').textContent = `${totalUnrealizedPnL.toFixed(2)} USDT`;
-        document.getElementById('unrealized-pnl').className = totalUnrealizedPnL >= 0 ? 'value positive' : 'value negative';
+        const balanceElement = document.getElementById('balance');
+        if (balanceElement) {
+            balanceElement.textContent = `${data.balance.toFixed(2)} USDT`;
+        }
+        
+        const unrealizedPnlElement = document.getElementById('unrealized-pnl');
+        if (unrealizedPnlElement) {
+            unrealizedPnlElement.textContent = `${totalUnrealizedPnL.toFixed(2)}`;
+            unrealizedPnlElement.className = totalUnrealizedPnL >= 0 ? 'stat-val value text-green' : 'stat-val value text-red';
+        }
         
         // Calculate total balance (wallet + unrealized P&L)
         const totalBalance = data.balance + totalUnrealizedPnL;
-        document.getElementById('total-balance').textContent = `${totalBalance.toFixed(2)} USDT`;
-        document.getElementById('total-balance').className = totalBalance >= data.balance ? 'value positive' : 'value negative';
+        const totalBalanceElement = document.getElementById('total-balance');
+        if (totalBalanceElement) {
+            totalBalanceElement.textContent = `${totalBalance.toFixed(2)}`;
+            totalBalanceElement.className = totalBalance >= data.balance ? 'value' : 'value text-red';
+        }
         
         // Update additional info
-        document.getElementById('active-positions-count').textContent = data.active_positions;
-        document.getElementById('total-pnl').textContent = `${data.total_pnl.toFixed(2)} USDT`;
-        document.getElementById('total-pnl').className = data.total_pnl >= 0 ? 'value positive' : 'value negative';
+        const activePositionsElement = document.getElementById('active-positions-count');
+        if (activePositionsElement) {
+            activePositionsElement.textContent = data.active_positions;
+        }
+        
+        const totalPnlElement = document.getElementById('total-pnl');
+        if (totalPnlElement) {
+            totalPnlElement.textContent = `${data.total_pnl.toFixed(2)}`;
+            totalPnlElement.className = data.total_pnl >= 0 ? 'stat-val value text-green' : 'stat-val value text-red';
+        }
         
         lastUpdateTime = Date.now();
     } catch (error) {
@@ -224,8 +247,11 @@ async function updateTrades() {
             const closedTrades = data.trades.filter(t => t.status === 'CLOSED' || t.pnl !== undefined);
             const winningTrades = closedTrades.filter(t => t.pnl > 0);
             const winRate = closedTrades.length > 0 ? (winningTrades.length / closedTrades.length * 100).toFixed(1) : 0;
-            document.getElementById('win-rate').textContent = `${winRate}%`;
-            document.getElementById('win-rate').className = winRate >= 50 ? 'value positive' : 'value negative';
+            const winRateElement = document.getElementById('win-rate');
+            if (winRateElement) {
+                winRateElement.textContent = `${winRate}%`;
+                winRateElement.className = winRate >= 50 ? 'stat-val value text-green' : 'stat-val value text-red';
+            }
             
             tbody.innerHTML = data.trades.slice(0, 20).map(trade => {
                 // Convert to Melbourne time
@@ -273,7 +299,10 @@ async function updateTrades() {
             }).join('');
         } else {
             tbody.innerHTML = '<tr><td colspan="10" class="no-data">No trades yet</td></tr>';
-            document.getElementById('win-rate').textContent = '0%';
+            const winRateElement = document.getElementById('win-rate');
+            if (winRateElement) {
+                winRateElement.textContent = '0%';
+            }
         }
     } catch (error) {
         console.error('Error updating trades:', error);
@@ -361,7 +390,10 @@ async function updateMarketData() {
         }
         
         // Update limit orders count
-        document.getElementById('limit-orders-count').textContent = limitOrdersCount;
+        const limitOrdersElement = document.getElementById('limit-orders-count');
+        if (limitOrdersElement) {
+            limitOrdersElement.textContent = limitOrdersCount;
+        }
         
     } catch (error) {
         console.error('Error updating market data:', error);
