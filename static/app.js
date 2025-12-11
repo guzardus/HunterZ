@@ -319,34 +319,93 @@ async function updatePendingOrders() {
         
         const tbody = document.getElementById('pending-orders-tbody');
         
+        // Combine bot-tracked pending orders and actual exchange orders
+        const allOrders = [];
+        // Use Set for O(1) duplicate checking
+        const botTrackedOrderIds = new Set();
+        
+        // Add bot-tracked pending orders (for TP/SL tracking)
         if (data.pending_orders && Object.keys(data.pending_orders).length > 0) {
-            const ordersArray = Object.entries(data.pending_orders).map(([symbol, order]) => ({
-                symbol,
-                ...order
-            }));
-            
-            tbody.innerHTML = ordersArray.map(order => {
-                // Convert to Melbourne time
-                const time = new Date(order.timestamp).toLocaleString('en-AU', { 
-                    timeZone: 'Australia/Melbourne',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-                
+            Object.entries(data.pending_orders).forEach(([symbol, order]) => {
                 const params = order.params || {};
-                const side = params.side || '-';
-                const entryPrice = params.entry_price ? `$${params.entry_price.toFixed(2)}` : '-';
-                const size = params.quantity ? params.quantity.toFixed(4) : '-';
-                const takeProfit = params.take_profit ? `$${params.take_profit.toFixed(2)}` : '-';
-                const stopLoss = params.stop_loss ? `$${params.stop_loss.toFixed(2)}` : '-';
-                const orderId = order.order_id ? order.order_id.substring(0, 8) + '...' : '-';
+                const orderId = order.order_id || '';
+                botTrackedOrderIds.add(orderId);
+                allOrders.push({
+                    symbol: symbol,
+                    side: (params.side || '').toUpperCase(),
+                    price: params.entry_price || 0,
+                    amount: params.quantity || 0,
+                    take_profit: params.take_profit || 0,
+                    stop_loss: params.stop_loss || 0,
+                    order_id: orderId,
+                    timestamp: order.timestamp || '',
+                    source: 'bot_tracked',
+                    type: 'limit'
+                });
+            });
+        }
+        
+        // Add actual exchange open orders (these are the real orders on exchange)
+        if (data.exchange_open_orders && data.exchange_open_orders.length > 0) {
+            data.exchange_open_orders.forEach(order => {
+                // Check if this order is already in bot-tracked (avoid duplicates) using Set for O(1) lookup
+                if (!botTrackedOrderIds.has(order.order_id)) {
+                    allOrders.push({
+                        symbol: order.symbol || '',
+                        side: (order.side || '').toUpperCase(),
+                        price: order.price || order.stop_price || 0,
+                        amount: order.amount || 0,
+                        take_profit: null,
+                        stop_loss: null,
+                        order_id: order.order_id || '',
+                        timestamp: order.timestamp || '',
+                        source: 'exchange',
+                        type: order.type || 'limit',
+                        reduce_only: order.reduce_only || false,
+                        stop_price: order.stop_price || null
+                    });
+                }
+            });
+        }
+        
+        if (allOrders.length > 0) {
+            tbody.innerHTML = allOrders.map(order => {
+                // Convert to Melbourne time
+                let time = '-';
+                if (order.timestamp) {
+                    time = new Date(order.timestamp).toLocaleString('en-AU', { 
+                        timeZone: 'Australia/Melbourne',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+                
+                const side = order.side || '-';
+                const entryPrice = order.price ? `$${Number(order.price).toFixed(2)}` : '-';
+                const size = order.amount ? Number(order.amount).toFixed(4) : '-';
+                const takeProfit = order.take_profit ? `$${Number(order.take_profit).toFixed(2)}` : '-';
+                const stopLoss = order.stop_loss ? `$${Number(order.stop_loss).toFixed(2)}` : '-';
+                const orderId = order.order_id ? order.order_id.toString().substring(0, 8) + '...' : '-';
+                
+                // Add type indicator for different order types
+                let typeIndicator = '';
+                if (order.type === 'STOP_MARKET' || order.type === 'stop_market') {
+                    typeIndicator = ' (SL)';
+                } else if (order.type === 'TAKE_PROFIT_MARKET' || order.type === 'take_profit_market') {
+                    typeIndicator = ' (TP)';
+                } else if (order.reduce_only) {
+                    typeIndicator = ' (Close)';
+                }
+                
+                // Source indicator
+                const sourceClass = order.source === 'exchange' ? 'style="background: rgba(74, 222, 128, 0.1);"' : '';
                 
                 return `
-                    <tr>
+                    <tr ${sourceClass}>
                         <td><strong>${order.symbol}</strong></td>
-                        <td class="${side === 'BUY' ? 'positive' : side === 'SELL' ? 'negative' : ''}">${side}</td>
+                        <td class="${side === 'BUY' ? 'positive' : side === 'SELL' ? 'negative' : ''}">${side}${typeIndicator}</td>
                         <td>${entryPrice}</td>
                         <td>${size}</td>
                         <td>${takeProfit}</td>

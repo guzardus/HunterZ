@@ -332,9 +332,14 @@ def run_bot_logic():
             symbols = utils.get_trading_pairs()
             # print(f"\nScanning {len(symbols)} pairs: {symbols}")
             
-            balance = client.get_balance()
-            state.update_balance(balance)
-            # print(f"Current Balance: {balance:.2f} USDT")
+            # Fetch full balance info
+            full_balance = client.get_full_balance()
+            state.update_full_balance(full_balance['total'], full_balance['free'], full_balance['used'])
+            # print(f"Current Balance: {full_balance['total']:.2f} USDT (Free: {full_balance['free']:.2f})")
+            
+            # Fetch all open orders from exchange and update state
+            exchange_orders = client.get_all_open_orders()
+            state.update_exchange_open_orders(exchange_orders)
             
             for symbol in symbols:
                 # print(f"\n--- Processing {symbol} ---")
@@ -371,7 +376,18 @@ def run_bot_logic():
                     # print("No valid unmitigated order blocks found.")
                     continue
                 
-                has_position = position and float(position['entryPrice']) > 0 and float(position['positionAmt']) != 0
+                # Check if position exists using ccxt unified format
+                # ccxt uses 'contracts' for position amount, 'entryPrice' for entry price
+                has_position = False
+                if position:
+                    contracts = position.get('contracts', position.get('positionAmt', 0))
+                    if contracts is None:
+                        contracts = 0
+                    entry_price = position.get('entryPrice', 0)
+                    if entry_price is None:
+                        entry_price = 0
+                    has_position = float(contracts) != 0 and float(entry_price) > 0
+                
                 if has_position:
                     # print(f"Position exists for {symbol}. Skipping new entry search.")
                     continue
@@ -400,7 +416,7 @@ def run_bot_logic():
                 # print(f"Found Candidate OB: {best_ob['type'].upper()} at {best_ob['ob_top']}-{best_ob['ob_bottom']}")
                 
                 # 5. Calculate Parameters
-                params = risk_manager.calculate_trade_params(best_ob, balance)
+                params = risk_manager.calculate_trade_params(best_ob, full_balance['free'])
                 if not params:
                     continue
                 params['symbol'] = symbol
@@ -432,8 +448,7 @@ def run_bot_logic():
                     state.add_pending_order(symbol, order['id'], params)
                     state.bot_state.metrics.placed_orders_count += 1
             
-            # Update exchange orders count to reflect current state
-            update_exchange_orders_count(client)
+            # Note: exchange_orders count is already updated in state.update_exchange_open_orders() above
             
             # Sleep for 2 minutes between cycles
             time.sleep(120)
