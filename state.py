@@ -58,7 +58,15 @@ def update_ohlcv(symbol: str, df):
     bot_state.ohlcv_data[symbol] = records
 
 def update_position(symbol: str, position: Dict):
-    """Update position information for a symbol"""
+    """Update position information for a symbol.
+    
+    When a position closes (goes from existing to not existing),
+    this function also updates any open trade in the history with
+    the exit information and calculates the final PnL.
+    """
+    had_position = symbol in bot_state.positions
+    old_position = bot_state.positions.get(symbol) if had_position else None
+    
     if position and float(position.get('positionAmt', 0)) != 0:
         bot_state.positions[symbol] = {
             'symbol': symbol,
@@ -72,7 +80,46 @@ def update_position(symbol: str, position: Dict):
             'stop_loss': position.get('stop_loss')  # Add SL
         }
     elif symbol in bot_state.positions:
+        # Position was closed - update the trade history
+        if old_position:
+            _close_trade_in_history(symbol, old_position)
         del bot_state.positions[symbol]
+
+
+def _close_trade_in_history(symbol: str, old_position: Dict):
+    """Find and update the open trade for this symbol with exit information.
+    
+    Args:
+        symbol: The trading symbol (e.g., 'BTC/USDT')
+        old_position: The position data before it was closed
+    """
+    # Find the most recent open trade for this symbol
+    for trade in bot_state.trade_history:
+        if trade.get('symbol') == symbol and trade.get('status') == 'OPEN':
+            # Calculate exit price (use mark_price as approximation)
+            exit_price = old_position.get('mark_price', old_position.get('entry_price', 0))
+            entry_price = trade.get('entry_price', old_position.get('entry_price', 0))
+            size = trade.get('size', old_position.get('size', 0))
+            side = trade.get('side', old_position.get('side', 'LONG'))
+            
+            # Calculate PnL - handle both BUY/SELL and LONG/SHORT notation
+            is_long = side in ('LONG', 'BUY')
+            if is_long:
+                pnl = (exit_price - entry_price) * size
+            else:  # SHORT or SELL
+                pnl = (entry_price - exit_price) * size
+            
+            # Update the trade
+            trade['exit_price'] = exit_price
+            trade['pnl'] = round(pnl, 2)
+            trade['status'] = 'CLOSED'
+            trade['exit_time'] = datetime.datetime.now().isoformat()
+            
+            # Update total PnL
+            bot_state.total_pnl += pnl
+            
+            print(f"Trade closed for {symbol}: PnL = {pnl:.2f} USDT")
+            break
 
 def add_trade(trade: Dict):
     """Add a trade to history"""

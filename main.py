@@ -274,6 +274,23 @@ def run_bot_logic():
                             else:
                                 print(f"WARNING: Some TP/SL orders failed for {symbol}")
                             
+                            # Record the trade entry
+                            entry_price = float(formatted['entry_price'])
+                            quantity = float(formatted['quantity'])
+                            state.add_trade({
+                                'symbol': symbol,
+                                'side': params['side'].upper(),
+                                'entry_price': entry_price,
+                                'exit_price': None,
+                                'size': quantity,
+                                'pnl': None,
+                                'status': 'OPEN',
+                                'take_profit': float(formatted['take_profit']),
+                                'stop_loss': float(formatted['stop_loss']),
+                                'entry_time': order_status.get('datetime', None)
+                            })
+                            print(f"Trade entry recorded for {symbol}")
+                            
                             # Remove from pending orders
                             state.remove_pending_order(symbol)
                             
