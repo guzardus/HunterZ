@@ -16,6 +16,8 @@ class Metrics:
 @dataclass
 class BotState:
     balance: float = 0.0
+    total_balance: float = 0.0  # Total balance including used margin
+    free_balance: float = 0.0   # Available balance for trading
     active_trades: List[Dict] = field(default_factory=list)
     order_blocks: Dict[str, List[Dict]] = field(default_factory=dict) # symbol -> list of OBs
     positions: Dict[str, Dict] = field(default_factory=dict) # symbol -> position info
@@ -23,7 +25,8 @@ class BotState:
     ohlcv_data: Dict[str, List[Dict]] = field(default_factory=dict) # symbol -> recent data for charting
     trade_history: List[Dict] = field(default_factory=list)
     total_pnl: float = 0.0
-    pending_orders: Dict[str, Dict] = field(default_factory=dict) # symbol -> order info with TP/SL params
+    pending_orders: Dict[str, Dict] = field(default_factory=dict) # symbol -> order info with TP/SL params (bot-tracked)
+    exchange_open_orders: List[Dict] = field(default_factory=list) # Actual open orders from exchange
     orphaned_orders: List[Dict] = field(default_factory=list) # Orders found on exchange but not in state
     reconciliation_log: List[Dict] = field(default_factory=list) # Log of reconciliation actions
     metrics: Metrics = field(default_factory=Metrics)
@@ -34,6 +37,39 @@ bot_state = BotState()
 def update_balance(balance: float):
     bot_state.balance = balance
     bot_state.last_update = datetime.datetime.now().isoformat()
+
+def update_full_balance(total: float, free: float, used: float):
+    """Update complete balance information."""
+    bot_state.total_balance = total
+    bot_state.free_balance = free
+    bot_state.balance = total  # Keep backward compatibility
+    bot_state.last_update = datetime.datetime.now().isoformat()
+
+def update_exchange_open_orders(orders: List[Dict]):
+    """Update the list of open orders from the exchange.
+    
+    Transforms ccxt order format to a frontend-friendly format.
+    """
+    formatted_orders = []
+    for order in orders:
+        formatted_order = {
+            'order_id': order.get('id', ''),
+            'symbol': order.get('symbol', ''),
+            'type': order.get('type', ''),
+            'side': order.get('side', '').upper(),
+            'price': float(order.get('price', 0) or 0),
+            'amount': float(order.get('amount', 0) or 0),
+            'filled': float(order.get('filled', 0) or 0),
+            'remaining': float(order.get('remaining', 0) or 0),
+            'status': order.get('status', ''),
+            'timestamp': order.get('datetime', ''),
+            'reduce_only': order.get('reduceOnly', False),
+            'stop_price': float(order.get('stopPrice', 0) or 0) if order.get('stopPrice') else None
+        }
+        formatted_orders.append(formatted_order)
+    
+    bot_state.exchange_open_orders = formatted_orders
+    bot_state.metrics.open_exchange_orders_count = len(formatted_orders)
 
 def update_order_blocks(symbol: str, obs: List[Dict]):
     # Convert timestamps to string if needed or keep as is
@@ -63,22 +99,66 @@ def update_position(symbol: str, position: Dict):
     When a position closes (goes from existing to not existing),
     this function also updates any open trade in the history with
     the exit information and calculates the final PnL.
+    
+    Note: This function handles both ccxt unified format and raw Binance format.
+    ccxt unified format uses: 'contracts', 'entryPrice', 'markPrice', 'unrealizedPnl', 'side'
+    Binance raw format uses: 'positionAmt', 'entryPrice', 'markPrice', 'unRealizedProfit'
     """
     had_position = symbol in bot_state.positions
     old_position = bot_state.positions.get(symbol) if had_position else None
     
-    if position and float(position.get('positionAmt', 0)) != 0:
-        bot_state.positions[symbol] = {
-            'symbol': symbol,
-            'side': 'LONG' if float(position['positionAmt']) > 0 else 'SHORT',
-            'size': abs(float(position['positionAmt'])),
-            'entry_price': float(position['entryPrice']),
-            'mark_price': float(position.get('markPrice', 0)),
-            'unrealized_pnl': float(position.get('unRealizedProfit', 0)),
-            'leverage': float(position.get('leverage', 1)),
-            'take_profit': position.get('take_profit'),  # Add TP
-            'stop_loss': position.get('stop_loss')  # Add SL
-        }
+    if position:
+        # Handle both ccxt unified format and Binance raw format
+        # ccxt uses 'contracts', Binance uses 'positionAmt'
+        position_amount = position.get('contracts', position.get('positionAmt', 0))
+        if position_amount is None:
+            position_amount = 0
+        position_amount = float(position_amount)
+        
+        if position_amount != 0:
+            # Determine side - ccxt may provide 'side' directly
+            if 'side' in position and position['side']:
+                side = position['side'].upper()
+                if side == 'LONG' or side == 'BUY':
+                    side = 'LONG'
+                elif side == 'SHORT' or side == 'SELL':
+                    side = 'SHORT'
+                else:
+                    side = 'LONG' if position_amount > 0 else 'SHORT'
+            else:
+                side = 'LONG' if position_amount > 0 else 'SHORT'
+            
+            # Get entry price - ccxt uses 'entryPrice'
+            entry_price = float(position.get('entryPrice', 0) or 0)
+            
+            # Get mark price - ccxt uses 'markPrice'  
+            mark_price = float(position.get('markPrice', 0) or 0)
+            
+            # Get unrealized PnL - ccxt uses 'unrealizedPnl', Binance uses 'unRealizedProfit'
+            unrealized_pnl = position.get('unrealizedPnl', position.get('unRealizedProfit', 0))
+            if unrealized_pnl is None:
+                unrealized_pnl = 0
+            unrealized_pnl = float(unrealized_pnl)
+            
+            # Get leverage
+            leverage = float(position.get('leverage', 1) or 1)
+            
+            bot_state.positions[symbol] = {
+                'symbol': symbol,
+                'side': side,
+                'size': abs(position_amount),
+                'entry_price': entry_price,
+                'mark_price': mark_price,
+                'unrealized_pnl': unrealized_pnl,
+                'leverage': leverage,
+                'take_profit': position.get('take_profit'),  # Add TP
+                'stop_loss': position.get('stop_loss')  # Add SL
+            }
+        elif symbol in bot_state.positions:
+            # Position was closed - update the trade history
+            if old_position:
+                _close_trade_in_history(symbol, old_position)
+            del bot_state.positions[symbol]
     elif symbol in bot_state.positions:
         # Position was closed - update the trade history
         if old_position:

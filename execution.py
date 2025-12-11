@@ -31,6 +31,20 @@ class BinanceClient:
             print(f"Error fetching balance: {e}")
             return 0.0
 
+    def get_full_balance(self):
+        """Get complete balance information including total, free, and used."""
+        try:
+            balance = self.exchange.fetch_balance()
+            usdt_balance = balance.get('USDT', {})
+            return {
+                'total': float(usdt_balance.get('total', 0)),
+                'free': float(usdt_balance.get('free', 0)),
+                'used': float(usdt_balance.get('used', 0))
+            }
+        except Exception as e:
+            print(f"Error fetching full balance: {e}")
+            return {'total': 0.0, 'free': 0.0, 'used': 0.0}
+
     def get_position(self, symbol):
         try:
             positions = self.exchange.fetch_positions([symbol])
@@ -41,6 +55,53 @@ class BinanceClient:
         except Exception as e:
             print(f"Error fetching position for {symbol}: {e}")
             return None
+
+    def get_all_positions(self):
+        """Fetch all open positions from the exchange."""
+        try:
+            positions = self.exchange.fetch_positions()
+            # Filter to only positions with non-zero amounts
+            open_positions = []
+            for pos in positions:
+                contracts = float(pos.get('contracts', 0) or 0)
+                if contracts != 0:
+                    open_positions.append(pos)
+            return open_positions
+        except Exception as e:
+            print(f"Error fetching all positions: {e}")
+            return []
+
+    def get_all_open_orders(self):
+        """Fetch all open orders from the exchange across all trading pairs."""
+        try:
+            orders = self.exchange.fetch_open_orders()
+            return orders
+        except Exception as e:
+            print(f"Error fetching all open orders: {e}")
+            return []
+
+    def get_recent_trades(self, symbol=None, limit=50):
+        """Fetch recent closed trades/fills from the exchange."""
+        try:
+            if symbol:
+                trades = self.exchange.fetch_my_trades(symbol, limit=limit)
+            else:
+                # Fetch trades for all trading pairs
+                all_trades = []
+                import config
+                for pair in config.TRADING_PAIRS:
+                    try:
+                        trades = self.exchange.fetch_my_trades(pair, limit=10)
+                        all_trades.extend(trades)
+                    except Exception as e:
+                        print(f"Error fetching trades for {pair}: {e}")
+                # Sort by timestamp descending
+                all_trades.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+                return all_trades[:limit]
+            return trades
+        except Exception as e:
+            print(f"Error fetching recent trades: {e}")
+            return []
 
     def cancel_all_orders(self, symbol):
         try:

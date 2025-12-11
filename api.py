@@ -47,7 +47,8 @@ def serve_frontend():
 def get_status():
     """Get overall bot status"""
     return {
-        "balance": state.bot_state.balance,
+        "balance": state.bot_state.total_balance,  # Use total balance
+        "free_balance": state.bot_state.free_balance,
         "total_pnl": state.bot_state.total_pnl,
         "last_update": state.bot_state.last_update,
         "trading_pairs": config.TRADING_PAIRS,
@@ -58,14 +59,14 @@ def get_status():
 @app.get("/api/balance")
 def get_balance():
     """Get wallet balance in USDT"""
-    total_in_positions = sum(
-        pos.get('mark_price', pos.get('entry_price', 0)) * pos.get('size', 0) 
+    total_unrealized_pnl = sum(
+        pos.get('unrealized_pnl', 0) 
         for pos in state.bot_state.positions.values()
     )
     return {
-        "total": state.bot_state.balance,
-        "free": state.bot_state.balance - total_in_positions,
-        "in_positions": total_in_positions,
+        "total": state.bot_state.total_balance,
+        "free": state.bot_state.free_balance,
+        "unrealized_pnl": total_unrealized_pnl,
         "currency": "USDT"
     }
 
@@ -164,14 +165,28 @@ def get_metrics():
             "filled_orders_count": metrics.filled_orders_count
         },
         "reconciliation_log": state.bot_state.reconciliation_log[:50],  # Last 50 entries
-        "pending_orders": len(state.bot_state.pending_orders)
+        "pending_orders": len(state.bot_state.pending_orders),
+        "exchange_open_orders": len(state.bot_state.exchange_open_orders)
     }
 
 @app.get("/api/pending-orders")
 def get_pending_orders():
-    """Get all pending orders with details"""
+    """Get all pending orders with details.
+    
+    Returns both:
+    - Bot-tracked pending orders (for TP/SL placement after fill)
+    - Actual open orders from the exchange
+    """
     return {
-        "pending_orders": state.bot_state.pending_orders
+        "pending_orders": state.bot_state.pending_orders,
+        "exchange_open_orders": state.bot_state.exchange_open_orders
+    }
+
+@app.get("/api/exchange-orders")
+def get_exchange_orders():
+    """Get actual open orders from the exchange."""
+    return {
+        "orders": state.bot_state.exchange_open_orders
     }
 
 if __name__ == "__main__":
