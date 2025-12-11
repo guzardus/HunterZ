@@ -274,13 +274,14 @@ def run_bot_logic():
                             else:
                                 print(f"WARNING: Some TP/SL orders failed for {symbol}")
                             
-                            # Record the trade entry
-                            entry_price = float(formatted['entry_price'])
+                            # Record the trade entry using actual fill price from order status
+                            # Use average fill price if available, otherwise fall back to order price
+                            fill_price = float(order_status.get('average', order_status.get('price', params['entry_price'])))
                             quantity = float(formatted['quantity'])
                             state.add_trade({
                                 'symbol': symbol,
                                 'side': params['side'].upper(),
-                                'entry_price': entry_price,
+                                'entry_price': fill_price,
                                 'exit_price': None,
                                 'size': quantity,
                                 'pnl': None,

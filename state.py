@@ -92,12 +92,21 @@ def _close_trade_in_history(symbol: str, old_position: Dict):
     Args:
         symbol: The trading symbol (e.g., 'BTC/USDT')
         old_position: The position data before it was closed
+        
+    Note:
+        Since trades are inserted at position 0 (most recent first),
+        iterating from start finds the most recent open trade for this symbol.
     """
     # Find the most recent open trade for this symbol
     for trade in bot_state.trade_history:
         if trade.get('symbol') == symbol and trade.get('status') == 'OPEN':
-            # Calculate exit price (use mark_price as approximation)
-            exit_price = old_position.get('mark_price', old_position.get('entry_price', 0))
+            # Calculate exit price - prefer mark_price, fallback to entry_price
+            exit_price = old_position.get('mark_price', 0)
+            if exit_price == 0:
+                exit_price = old_position.get('entry_price', 0)
+                if exit_price > 0:
+                    print(f"Warning: Using entry_price as exit_price fallback for {symbol}")
+            
             entry_price = trade.get('entry_price', old_position.get('entry_price', 0))
             size = trade.get('size', old_position.get('size', 0))
             side = trade.get('side', old_position.get('side', 'LONG'))
