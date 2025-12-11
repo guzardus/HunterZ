@@ -28,6 +28,30 @@ def format_order_params(client, symbol, params):
         'take_profit': tp_price
     }
 
+def update_exchange_orders_count(client):
+    """Update the count of open orders on the exchange.
+    
+    This function fetches all open orders from the exchange and updates
+    the metrics to reflect the current count. This ensures the frontend
+    displays accurate "Exchange Orders" count.
+    """
+    try:
+        symbols = utils.get_trading_pairs()
+        all_orders = []
+        
+        for symbol in symbols:
+            try:
+                orders = client.get_open_orders(symbol)
+                all_orders.extend(orders)
+            except Exception as e:
+                print(f"Error fetching orders for {symbol} in count update: {e}")
+        
+        # Update the metric
+        state.bot_state.metrics.open_exchange_orders_count = len(all_orders)
+        # print(f"Updated exchange orders count: {len(all_orders)}")
+    except Exception as e:
+        print(f"Error updating exchange orders count: {e}")
+
 def reconcile_live_orders(client):
     """Reconcile exchange orders with persisted pending orders at startup.
     
@@ -379,6 +403,9 @@ def run_bot_logic():
                     # Store the order info for later TP/SL placement
                     state.add_pending_order(symbol, order['id'], params)
                     state.bot_state.metrics.placed_orders_count += 1
+            
+            # Update exchange orders count to reflect current state
+            update_exchange_orders_count(client)
             
             # Sleep for 2 minutes between cycles
             time.sleep(120)
