@@ -311,6 +311,59 @@ async function updatePositions() {
     }
 }
 
+// Fetch and update pending orders
+async function updatePendingOrders() {
+    try {
+        const response = await fetch('/api/pending-orders');
+        const data = await response.json();
+        
+        const tbody = document.getElementById('pending-orders-tbody');
+        
+        if (data.pending_orders && Object.keys(data.pending_orders).length > 0) {
+            const ordersArray = Object.entries(data.pending_orders).map(([symbol, order]) => ({
+                symbol,
+                ...order
+            }));
+            
+            tbody.innerHTML = ordersArray.map(order => {
+                // Convert to Melbourne time
+                const time = new Date(order.timestamp).toLocaleString('en-AU', { 
+                    timeZone: 'Australia/Melbourne',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                const params = order.params || {};
+                const side = params.side || '-';
+                const entryPrice = params.entry_price ? `$${params.entry_price.toFixed(2)}` : '-';
+                const size = params.quantity ? params.quantity.toFixed(4) : '-';
+                const takeProfit = params.take_profit ? `$${params.take_profit.toFixed(2)}` : '-';
+                const stopLoss = params.stop_loss ? `$${params.stop_loss.toFixed(2)}` : '-';
+                const orderId = order.order_id ? order.order_id.substring(0, 8) + '...' : '-';
+                
+                return `
+                    <tr>
+                        <td><strong>${order.symbol}</strong></td>
+                        <td class="${side === 'BUY' ? 'positive' : side === 'SELL' ? 'negative' : ''}">${side}</td>
+                        <td>${entryPrice}</td>
+                        <td>${size}</td>
+                        <td>${takeProfit}</td>
+                        <td>${stopLoss}</td>
+                        <td><span class="label" style="font-family: monospace;">${orderId}</span></td>
+                        <td>${time}</td>
+                    </tr>
+                `;
+            }).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="8" class="no-data">No pending orders</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error updating pending orders:', error);
+    }
+}
+
 // Fetch and update trade history with comprehensive data
 async function updateTrades() {
     try {
@@ -674,6 +727,7 @@ async function updateAll() {
         updateStatus(),
         updateWallet(),
         updatePositions(),
+        updatePendingOrders(),
         updateTrades(),
         updateMarketData(),
         updateMetrics()
