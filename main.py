@@ -34,6 +34,17 @@ def update_exchange_orders_count(client):
     This function fetches all open orders from the exchange and updates
     the metrics to reflect the current count. This ensures the frontend
     displays accurate "Exchange Orders" count.
+    
+    Args:
+        client: BinanceClient instance for fetching orders
+        
+    Returns:
+        None
+        
+    Note:
+        Handles exceptions gracefully - partial failures for individual symbols
+        don't prevent updating the count. Network errors or API rate limits are
+        caught and logged, allowing the function to continue processing remaining symbols.
     """
     try:
         symbols = utils.get_trading_pairs()
@@ -46,9 +57,8 @@ def update_exchange_orders_count(client):
             except Exception as e:
                 print(f"Error fetching orders for {symbol} in count update: {e}")
         
-        # Update the metric
+        # Update the metric with the count of successfully fetched orders
         state.bot_state.metrics.open_exchange_orders_count = len(all_orders)
-        # print(f"Updated exchange orders count: {len(all_orders)}")
     except Exception as e:
         print(f"Error updating exchange orders count: {e}")
 
