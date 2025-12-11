@@ -167,5 +167,12 @@ def get_metrics():
         "pending_orders": len(state.bot_state.pending_orders)
     }
 
+@app.get("/api/pending-orders")
+def get_pending_orders():
+    """Get all pending orders with details"""
+    return {
+        "pending_orders": state.bot_state.pending_orders
+    }
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
