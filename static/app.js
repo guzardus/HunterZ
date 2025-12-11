@@ -321,11 +321,15 @@ async function updatePendingOrders() {
         
         // Combine bot-tracked pending orders and actual exchange orders
         const allOrders = [];
+        // Use Set for O(1) duplicate checking
+        const botTrackedOrderIds = new Set();
         
         // Add bot-tracked pending orders (for TP/SL tracking)
         if (data.pending_orders && Object.keys(data.pending_orders).length > 0) {
             Object.entries(data.pending_orders).forEach(([symbol, order]) => {
                 const params = order.params || {};
+                const orderId = order.order_id || '';
+                botTrackedOrderIds.add(orderId);
                 allOrders.push({
                     symbol: symbol,
                     side: (params.side || '').toUpperCase(),
@@ -333,7 +337,7 @@ async function updatePendingOrders() {
                     amount: params.quantity || 0,
                     take_profit: params.take_profit || 0,
                     stop_loss: params.stop_loss || 0,
-                    order_id: order.order_id || '',
+                    order_id: orderId,
                     timestamp: order.timestamp || '',
                     source: 'bot_tracked',
                     type: 'limit'
@@ -344,10 +348,8 @@ async function updatePendingOrders() {
         // Add actual exchange open orders (these are the real orders on exchange)
         if (data.exchange_open_orders && data.exchange_open_orders.length > 0) {
             data.exchange_open_orders.forEach(order => {
-                // Check if this order is already in bot-tracked (avoid duplicates)
-                const existsInBotTracked = allOrders.some(o => o.order_id === order.order_id);
-                
-                if (!existsInBotTracked) {
+                // Check if this order is already in bot-tracked (avoid duplicates) using Set for O(1) lookup
+                if (!botTrackedOrderIds.has(order.order_id)) {
                     allOrders.push({
                         symbol: order.symbol || '',
                         side: (order.side || '').toUpperCase(),

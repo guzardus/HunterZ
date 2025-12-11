@@ -110,10 +110,7 @@ def update_position(symbol: str, position: Dict):
     if position:
         # Handle both ccxt unified format and Binance raw format
         # ccxt uses 'contracts', Binance uses 'positionAmt'
-        position_amount = position.get('contracts', position.get('positionAmt', 0))
-        if position_amount is None:
-            position_amount = 0
-        position_amount = float(position_amount)
+        position_amount = float(position.get('contracts', position.get('positionAmt', 0)) or 0)
         
         if position_amount != 0:
             # Determine side - ccxt may provide 'side' directly

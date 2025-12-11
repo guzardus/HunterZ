@@ -1,5 +1,4 @@
 import ccxt
-import os
 import config
 
 class BinanceClient:
@@ -88,7 +87,6 @@ class BinanceClient:
             else:
                 # Fetch trades for all trading pairs
                 all_trades = []
-                import config
                 for pair in config.TRADING_PAIRS:
                     try:
                         trades = self.exchange.fetch_my_trades(pair, limit=10)

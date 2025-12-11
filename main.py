@@ -448,8 +448,7 @@ def run_bot_logic():
                     state.add_pending_order(symbol, order['id'], params)
                     state.bot_state.metrics.placed_orders_count += 1
             
-            # Update exchange orders count to reflect current state (already done above, but keeping for metrics consistency)
-            update_exchange_orders_count(client)
+            # Note: exchange_orders count is already updated in state.update_exchange_open_orders() above
             
             # Sleep for 2 minutes between cycles
             time.sleep(120)
