@@ -175,3 +175,51 @@ class BinanceClient:
         except Exception as e:
             print(f"Error fetching open orders for {symbol if symbol else 'all symbols'}: {e}")
             return []
+    
+    def get_tp_sl_orders_for_position(self, symbol):
+        """Get TP/SL orders for a specific symbol.
+        
+        Args:
+            symbol: Trading symbol to check for TP/SL orders
+            
+        Returns:
+            dict: {'sl_order': order or None, 'tp_order': order or None}
+        """
+        try:
+            orders = self.get_open_orders(symbol)
+            sl_order = None
+            tp_order = None
+            
+            for order in orders:
+                order_type = order.get('type', '')
+                is_reduce_only = order.get('reduceOnly', False)
+                
+                if is_reduce_only or order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET', 
+                                                     'stop_market', 'take_profit_market']:
+                    if order_type in ['STOP_MARKET', 'stop_market']:
+                        sl_order = order
+                    elif order_type in ['TAKE_PROFIT_MARKET', 'take_profit_market']:
+                        tp_order = order
+            
+            return {'sl_order': sl_order, 'tp_order': tp_order}
+        except Exception as e:
+            print(f"Error getting TP/SL orders for {symbol}: {e}")
+            return {'sl_order': None, 'tp_order': None}
+    
+    def cancel_order(self, symbol, order_id):
+        """Cancel a specific order.
+        
+        Args:
+            symbol: Trading symbol
+            order_id: Order ID to cancel
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            self.exchange.cancel_order(order_id, symbol)
+            print(f"Cancelled order {order_id} for {symbol}")
+            return True
+        except Exception as e:
+            print(f"Error cancelling order {order_id} for {symbol}: {e}")
+            return False

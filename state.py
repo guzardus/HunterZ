@@ -140,6 +140,8 @@ def update_position(symbol: str, position: Dict):
             # Get leverage
             leverage = float(position.get('leverage', 1) or 1)
             
+            # Note: TP/SL will be derived from open orders via compute_position_tp_sl()
+            # We keep the position fields for backward compatibility
             bot_state.positions[symbol] = {
                 'symbol': symbol,
                 'side': side,
@@ -148,8 +150,8 @@ def update_position(symbol: str, position: Dict):
                 'mark_price': mark_price,
                 'unrealized_pnl': unrealized_pnl,
                 'leverage': leverage,
-                'take_profit': position.get('take_profit'),  # Add TP
-                'stop_loss': position.get('stop_loss')  # Add SL
+                'take_profit': position.get('take_profit'),  # Kept for backward compatibility
+                'stop_loss': position.get('stop_loss')  # Kept for backward compatibility
             }
         elif symbol in bot_state.positions:
             # Position was closed - update the trade history
@@ -161,6 +163,59 @@ def update_position(symbol: str, position: Dict):
         if old_position:
             _close_trade_in_history(symbol, old_position)
         del bot_state.positions[symbol]
+
+
+def compute_position_tp_sl(symbol: str, exchange_open_orders: List[Dict]) -> Dict:
+    """Compute TP/SL for a position by deriving from exchange open orders.
+    
+    This function looks for STOP_MARKET and TAKE_PROFIT_MARKET orders
+    that match the symbol and extracts their stop prices.
+    
+    Args:
+        symbol: Trading symbol
+        exchange_open_orders: List of open orders from the exchange
+        
+    Returns:
+        dict: {'take_profit': float or None, 'stop_loss': float or None}
+    """
+    take_profit = None
+    stop_loss = None
+    
+    for order in exchange_open_orders:
+        if order.get('symbol') != symbol:
+            continue
+        
+        order_type = order.get('type', '').upper()
+        is_reduce_only = order.get('reduceOnly', False) or order.get('reduce_only', False)
+        
+        # Check if it's a TP/SL order
+        if is_reduce_only or order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET']:
+            stop_price = order.get('stopPrice') or order.get('stop_price')
+            if stop_price:
+                stop_price = float(stop_price)
+                
+                if order_type == 'STOP_MARKET':
+                    stop_loss = stop_price
+                elif order_type == 'TAKE_PROFIT_MARKET':
+                    take_profit = stop_price
+    
+    return {'take_profit': take_profit, 'stop_loss': stop_loss}
+
+
+def enrich_positions_with_tp_sl():
+    """Enrich all positions with TP/SL derived from exchange open orders.
+    
+    This should be called after updating exchange_open_orders to ensure
+    position data includes current TP/SL information.
+    """
+    for symbol, position in bot_state.positions.items():
+        tp_sl = compute_position_tp_sl(symbol, bot_state.exchange_open_orders)
+        
+        # Update position with derived TP/SL
+        if tp_sl['take_profit'] is not None:
+            position['take_profit'] = tp_sl['take_profit']
+        if tp_sl['stop_loss'] is not None:
+            position['stop_loss'] = tp_sl['stop_loss']
 
 
 def _close_trade_in_history(symbol: str, old_position: Dict):

@@ -229,6 +229,241 @@ def reconcile_live_orders(client):
         "message": "Order reconciliation completed"
     })
 
+def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
+    """Reconcile TP/SL orders for an open position.
+    
+    This function:
+    1. Checks if position has TP/SL orders
+    2. Verifies TP/SL quantities match position size
+    3. Places missing TP/SL orders or replaces mismatched ones
+    
+    Args:
+        client: BinanceClient instance
+        symbol: Trading symbol
+        position: Position dict from exchange
+        pending_order: Optional pending order data with TP/SL params
+        
+    Returns:
+        bool: True if reconciliation successful, False otherwise
+    """
+    try:
+        # Get position details
+        position_amount = float(position.get('contracts', position.get('positionAmt', 0)) or 0)
+        if position_amount == 0:
+            return True  # No position, nothing to reconcile
+        
+        position_size = abs(position_amount)
+        is_long = position_amount > 0
+        side = 'LONG' if is_long else 'SHORT'
+        entry_price = float(position.get('entryPrice', 0) or 0)
+        
+        print(f"\n--- Reconciling TP/SL for {symbol} ({side}) ---")
+        print(f"Position size: {position_size}, Entry: {entry_price}")
+        
+        # Get existing TP/SL orders
+        tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
+        sl_order = tp_sl_orders['sl_order']
+        tp_order = tp_sl_orders['tp_order']
+        
+        # Determine TP/SL prices
+        sl_price = None
+        tp_price = None
+        
+        # Try to get TP/SL from pending order first
+        if pending_order and pending_order.get('params'):
+            params = pending_order['params']
+            sl_price = params.get('stop_loss')
+            tp_price = params.get('take_profit')
+            if sl_price:
+                sl_price = float(client.exchange.price_to_precision(symbol, sl_price))
+            if tp_price:
+                tp_price = float(client.exchange.price_to_precision(symbol, tp_price))
+        
+        # If no pending order, calculate TP/SL based on position
+        if not sl_price or not tp_price:
+            # Use simple percentage-based TP/SL as fallback
+            risk_pct = 0.01  # 1% risk
+            rr_ratio = config.RR_RATIO
+            
+            if is_long:
+                sl_price = entry_price * (1 - risk_pct)
+                tp_price = entry_price * (1 + risk_pct * rr_ratio)
+            else:
+                sl_price = entry_price * (1 + risk_pct)
+                tp_price = entry_price * (1 - risk_pct * rr_ratio)
+            
+            sl_price = float(client.exchange.price_to_precision(symbol, sl_price))
+            tp_price = float(client.exchange.price_to_precision(symbol, tp_price))
+            print(f"Calculated TP/SL from position: SL={sl_price}, TP={tp_price}")
+        
+        # Determine close side (opposite of position)
+        close_side = 'sell' if is_long else 'buy'
+        
+        # Format position size with proper precision
+        formatted_size = float(client.exchange.amount_to_precision(symbol, position_size))
+        
+        # Check if TP/SL orders need to be placed or replaced
+        needs_sl = False
+        needs_tp = False
+        
+        if not sl_order:
+            print(f"⚠ Missing SL order for {symbol}")
+            needs_sl = True
+            state.add_reconciliation_log("missing_sl_detected", {
+                "symbol": symbol,
+                "position_size": position_size,
+                "message": f"Position exists without SL order"
+            })
+        else:
+            sl_amount = float(sl_order.get('amount', 0))
+            if abs(sl_amount - formatted_size) > formatted_size * 0.01:  # 1% tolerance
+                print(f"⚠ SL quantity mismatch for {symbol}: {sl_amount} vs {formatted_size}")
+                needs_sl = True
+                # Cancel existing SL
+                client.cancel_order(symbol, sl_order['id'])
+                state.add_reconciliation_log("sl_quantity_mismatch", {
+                    "symbol": symbol,
+                    "expected": formatted_size,
+                    "actual": sl_amount,
+                    "message": f"SL order quantity mismatch, cancelling"
+                })
+        
+        if not tp_order:
+            print(f"⚠ Missing TP order for {symbol}")
+            needs_tp = True
+            state.add_reconciliation_log("missing_tp_detected", {
+                "symbol": symbol,
+                "position_size": position_size,
+                "message": f"Position exists without TP order"
+            })
+        else:
+            tp_amount = float(tp_order.get('amount', 0))
+            if abs(tp_amount - formatted_size) > formatted_size * 0.01:  # 1% tolerance
+                print(f"⚠ TP quantity mismatch for {symbol}: {tp_amount} vs {formatted_size}")
+                needs_tp = True
+                # Cancel existing TP
+                client.cancel_order(symbol, tp_order['id'])
+                state.add_reconciliation_log("tp_quantity_mismatch", {
+                    "symbol": symbol,
+                    "expected": formatted_size,
+                    "actual": tp_amount,
+                    "message": f"TP order quantity mismatch, cancelling"
+                })
+        
+        # Place missing or replacement orders
+        if needs_sl or needs_tp:
+            print(f"Placing TP/SL orders for {symbol}...")
+            if needs_sl and needs_tp:
+                # Place both together
+                orders = client.place_sl_tp_orders(symbol, 'buy' if is_long else 'sell', 
+                                                  formatted_size, sl_price, tp_price)
+                if orders['sl_order'] and orders['tp_order']:
+                    print(f"✓ Successfully placed both TP and SL for {symbol}")
+                    state.add_reconciliation_log("tp_sl_placed", {
+                        "symbol": symbol,
+                        "sl_price": sl_price,
+                        "tp_price": tp_price,
+                        "size": formatted_size,
+                        "message": "TP/SL orders successfully placed"
+                    })
+                    return True
+                else:
+                    print(f"✗ Failed to place some TP/SL orders for {symbol}")
+                    return False
+            elif needs_sl:
+                # Place only SL
+                sl_order_result = client.place_stop_loss(symbol, close_side, formatted_size, sl_price)
+                if sl_order_result:
+                    print(f"✓ Successfully placed SL for {symbol}")
+                    state.add_reconciliation_log("sl_placed", {
+                        "symbol": symbol,
+                        "sl_price": sl_price,
+                        "size": formatted_size,
+                        "message": "SL order successfully placed"
+                    })
+                    return True
+                else:
+                    print(f"✗ Failed to place SL for {symbol}")
+                    return False
+            elif needs_tp:
+                # Place only TP
+                tp_order_result = client.place_take_profit(symbol, close_side, formatted_size, tp_price)
+                if tp_order_result:
+                    print(f"✓ Successfully placed TP for {symbol}")
+                    state.add_reconciliation_log("tp_placed", {
+                        "symbol": symbol,
+                        "tp_price": tp_price,
+                        "size": formatted_size,
+                        "message": "TP order successfully placed"
+                    })
+                    return True
+                else:
+                    print(f"✗ Failed to place TP for {symbol}")
+                    return False
+        else:
+            print(f"✓ TP/SL orders are correct for {symbol}")
+            return True
+            
+    except Exception as e:
+        print(f"Error reconciling TP/SL for {symbol}: {e}")
+        state.add_reconciliation_log("reconciliation_error", {
+            "symbol": symbol,
+            "error": str(e),
+            "message": f"Error during TP/SL reconciliation"
+        })
+        return False
+
+def reconcile_all_positions_tp_sl(client):
+    """Reconcile TP/SL orders for all open positions.
+    
+    This function is called at startup and periodically to ensure
+    all positions have proper TP/SL orders.
+    
+    Args:
+        client: BinanceClient instance
+    """
+    print("\n=== Starting Position TP/SL Reconciliation ===")
+    state.add_reconciliation_log("position_reconciliation_start", {
+        "message": "Starting position TP/SL reconciliation"
+    })
+    
+    try:
+        # Fetch all open positions
+        positions = client.get_all_positions()
+        print(f"Found {len(positions)} open positions")
+        
+        reconciled_count = 0
+        failed_count = 0
+        
+        for position in positions:
+            symbol = position.get('symbol')
+            if not symbol:
+                continue
+            
+            # Check if there's a pending order for this symbol
+            pending = state.get_pending_order(symbol)
+            
+            # Reconcile this position
+            success = reconcile_position_tp_sl(client, symbol, position, pending)
+            if success:
+                reconciled_count += 1
+            else:
+                failed_count += 1
+        
+        print(f"=== Position Reconciliation Complete: {reconciled_count} reconciled, {failed_count} failed ===\n")
+        state.add_reconciliation_log("position_reconciliation_complete", {
+            "reconciled": reconciled_count,
+            "failed": failed_count,
+            "message": "Position TP/SL reconciliation completed"
+        })
+        
+    except Exception as e:
+        print(f"Error in position reconciliation: {e}")
+        state.add_reconciliation_log("position_reconciliation_error", {
+            "error": str(e),
+            "message": "Error during position TP/SL reconciliation"
+        })
+
 def run_bot_logic():
     print("Starting LuxAlgo Order Block Bot Logic...")
     
@@ -240,8 +475,22 @@ def run_bot_logic():
     # Reconcile live orders before starting main loop
     reconcile_live_orders(client)
     
+    # Reconcile positions and their TP/SL orders at startup
+    reconcile_all_positions_tp_sl(client)
+    
+    # Track last reconciliation time
+    import time as time_module
+    last_position_reconciliation = time_module.time()
+    
     while True:
         try:
+            # Check if it's time for periodic position reconciliation (every 10 minutes)
+            current_time = time_module.time()
+            if current_time - last_position_reconciliation > 600:  # 10 minutes
+                print("\n--- Periodic Position Reconciliation ---")
+                reconcile_all_positions_tp_sl(client)
+                last_position_reconciliation = current_time
+            
             # 1. Check and process any pending orders first
             for symbol in list(state.bot_state.pending_orders.keys()):
                 pending = state.get_pending_order(symbol)
@@ -340,6 +589,9 @@ def run_bot_logic():
             # Fetch all open orders from exchange and update state
             exchange_orders = client.get_all_open_orders()
             state.update_exchange_open_orders(exchange_orders)
+            
+            # Enrich positions with TP/SL derived from exchange orders
+            state.enrich_positions_with_tp_sl()
             
             for symbol in symbols:
                 # print(f"\n--- Processing {symbol} ---")
