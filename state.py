@@ -165,6 +165,26 @@ def update_position(symbol: str, position: Dict):
         del bot_state.positions[symbol]
 
 
+def _normalize_order_field(order: Dict, field_name: str, fallback_name: str = None):
+    """Helper to normalize order field names across different exchange formats.
+    
+    Some exchanges use camelCase (e.g., reduceOnly, stopPrice) while others
+    use snake_case (e.g., reduce_only, stop_price).
+    
+    Args:
+        order: Order dictionary
+        field_name: Primary field name to check
+        fallback_name: Alternative field name if primary not found
+        
+    Returns:
+        Field value or None if not found
+    """
+    value = order.get(field_name)
+    if value is None and fallback_name:
+        value = order.get(fallback_name)
+    return value
+
+
 def compute_position_tp_sl(symbol: str, exchange_open_orders: List[Dict]) -> Dict:
     """Compute TP/SL for a position by deriving from exchange open orders.
     
@@ -186,11 +206,11 @@ def compute_position_tp_sl(symbol: str, exchange_open_orders: List[Dict]) -> Dic
             continue
         
         order_type = order.get('type', '').upper()
-        is_reduce_only = order.get('reduceOnly', False) or order.get('reduce_only', False)
+        is_reduce_only = _normalize_order_field(order, 'reduceOnly', 'reduce_only')
         
         # Check if it's a TP/SL order
         if is_reduce_only or order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET']:
-            stop_price = order.get('stopPrice') or order.get('stop_price')
+            stop_price = _normalize_order_field(order, 'stopPrice', 'stop_price')
             if stop_price:
                 stop_price = float(stop_price)
                 

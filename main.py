@@ -316,7 +316,7 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
             })
         else:
             sl_amount = float(sl_order.get('amount', 0))
-            if abs(sl_amount - formatted_size) > formatted_size * 0.01:  # 1% tolerance
+            if abs(sl_amount - formatted_size) > formatted_size * config.TP_SL_QUANTITY_TOLERANCE:
                 print(f"⚠ SL quantity mismatch for {symbol}: {sl_amount} vs {formatted_size}")
                 needs_sl = True
                 # Cancel existing SL
@@ -338,7 +338,7 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
             })
         else:
             tp_amount = float(tp_order.get('amount', 0))
-            if abs(tp_amount - formatted_size) > formatted_size * 0.01:  # 1% tolerance
+            if abs(tp_amount - formatted_size) > formatted_size * config.TP_SL_QUANTITY_TOLERANCE:
                 print(f"⚠ TP quantity mismatch for {symbol}: {tp_amount} vs {formatted_size}")
                 needs_tp = True
                 # Cancel existing TP
@@ -484,9 +484,9 @@ def run_bot_logic():
     
     while True:
         try:
-            # Check if it's time for periodic position reconciliation (every 10 minutes)
+            # Check if it's time for periodic position reconciliation
             current_time = time_module.time()
-            if current_time - last_position_reconciliation > 600:  # 10 minutes
+            if current_time - last_position_reconciliation > config.POSITION_RECONCILIATION_INTERVAL:
                 print("\n--- Periodic Position Reconciliation ---")
                 reconcile_all_positions_tp_sl(client)
                 last_position_reconciliation = current_time

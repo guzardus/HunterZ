@@ -17,6 +17,10 @@ TIMEFRAME = '30m'
 RR_RATIO = 2.0
 RISK_PER_TRADE = 1.0  # 1% of balance
 
+# Reconciliation Settings
+TP_SL_QUANTITY_TOLERANCE = 0.01  # 1% tolerance for quantity matching
+POSITION_RECONCILIATION_INTERVAL = 600  # 10 minutes in seconds
+
 # Symbol filtering
 TRADING_PAIRS = [
     'BTC/USDT',
