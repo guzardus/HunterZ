@@ -147,6 +147,12 @@ The bot implements the LuxAlgo Order Block strategy:
 - **Startup reconciliation**: Validates and reconciles all exchange orders at bot startup
 - **Orphan order handling**: Automatically cancels orders that don't match current strategy
 - **Partial fill handling**: Places TP/SL for partial fills and tracks remaining quantity
+- **Manual cancellation recovery**: If you manually cancel a limit order, bot automatically replaces it based on current OB opportunities without doubling up
+- **TP/SL Reconciliation**: 
+  - Automatically repairs missing TP/SL orders for open positions
+  - Detects and fixes TP/SL quantity mismatches
+  - Runs at startup and every 10 minutes
+  - Derives TP/SL from exchange orders for accurate display
 
 ## Development
 
@@ -162,6 +168,12 @@ HunterZ/
 ├── risk_manager.py     # Risk management and position sizing
 ├── state.py            # Global state management
 ├── utils.py            # Utility functions
+├── tests/              # Automated tests
+│   ├── __init__.py
+│   ├── run_tests.py    # Test runner
+│   ├── test_tp_sl_reconciliation.py  # Unit tests
+│   ├── test_execution_flow.py        # Integration tests
+│   └── README.md       # Testing documentation
 ├── static/             # Frontend files
 │   ├── index.html      # Main dashboard HTML
 │   ├── style.css       # TRON-themed styles
@@ -169,6 +181,30 @@ HunterZ/
 ├── requirements.txt    # Python dependencies
 └── .env.example        # Environment variables template
 ```
+
+### Running Tests
+
+The project includes comprehensive automated tests for TP/SL management:
+
+```bash
+# Run all tests
+python tests/run_tests.py
+
+# Run with verbose output
+python tests/run_tests.py -v
+
+# Run specific test file
+python tests/run_tests.py test_tp_sl_reconciliation
+```
+
+For detailed testing documentation, see [tests/README.md](tests/README.md).
+
+Test coverage includes:
+- TP/SL derivation from exchange orders
+- Position reconciliation logic
+- Order placement flow with mocked exchange
+- Quantity mismatch detection and repair
+- Missing TP/SL detection and creation
 
 ## Troubleshooting
 
@@ -205,6 +241,54 @@ HunterZ/
 
 ## Testing the New Features
 
+### Automated Tests
+The bot includes comprehensive automated tests:
+```bash
+python tests/run_tests.py -v
+```
+See [tests/README.md](tests/README.md) for details.
+
+### TP/SL Reconciliation
+The bot now automatically ensures all positions have proper TP/SL orders:
+
+**At Startup:**
+- Checks all open positions for missing or mismatched TP/SL orders
+- Places missing TP/SL orders with correct quantities
+- Cancels and replaces TP/SL orders with wrong quantities
+
+**During Operation:**
+- Runs reconciliation every 10 minutes
+- Logs all actions to the reconciliation log
+- Derives TP/SL from exchange orders for accurate display
+
+**Testing Scenarios:**
+1. **Manual Repair Test**:
+   - Start bot with testnet
+   - Place a trade and wait for entry fill
+   - Manually cancel SL or TP order on Binance UI
+   - Wait for next reconciliation cycle (up to 10 min) or restart bot
+   - Verify missing order is recreated
+
+2. **Manual Limit Order Cancellation**:
+   - Start bot with testnet
+   - Wait for bot to place a limit entry order for an OB
+   - Manually cancel the limit order on Binance UI
+   - Bot will detect the cancellation on next cycle (2 min)
+   - If OB opportunity still exists, bot will place the order back
+   - No duplicate orders will be created
+
+3. **Quantity Mismatch Test**:
+   - Open a position
+   - Manually modify TP/SL order quantity on Binance
+   - Restart bot or wait for reconciliation
+   - Verify old orders are cancelled and new ones created with correct size
+
+4. **Restart Test**:
+   - Stop bot with open position
+   - Restart bot
+   - Check console for position reconciliation output
+   - Verify TP/SL are still present and correct
+
 ### Persistent State
 - Pending orders are automatically saved to `data/pending_orders.json`
 - Stop the bot and restart it to verify orders persist
@@ -216,7 +300,8 @@ HunterZ/
   2. Fetch all open orders from the exchange
   3. Match orders with pending orders and current order blocks
   4. Cancel orphaned orders that don't match strategy
-  5. Log all reconciliation actions
+  5. Check all positions for proper TP/SL orders
+  6. Log all reconciliation actions
 - Check the console output for reconciliation logs
 - View the "Recent Reconciliation Actions" section in the UI
 
@@ -229,6 +314,7 @@ HunterZ/
   - Cancelled: Total orders cancelled
   - Filled: Total orders filled
 - Recent actions log shows the last 50 reconciliation events
+- Position TP/SL values are derived from actual exchange orders
 
 ### Partial Fills
 - If an order is partially filled:
