@@ -673,14 +673,44 @@ def run_bot_logic():
                     continue
                 params['symbol'] = symbol
                 
-                # 6. Check if pending order exists before placing new order
-                if state.get_pending_order(symbol):
-                    print(f"Pending order exists for {symbol}, skipping new placement")
-                    state.add_reconciliation_log("placement_skipped", {
-                        "symbol": symbol,
-                        "reason": "Pending order already exists"
-                    })
-                    continue
+                # 6. Check if pending order exists and verify it's still on exchange
+                pending = state.get_pending_order(symbol)
+                if pending:
+                    # Verify the order still exists on exchange
+                    pending_order_id = pending.get('order_id')
+                    try:
+                        order_status = client.get_order_status(symbol, pending_order_id)
+                        if order_status and order_status.get('status') == 'open':
+                            # Order still exists on exchange, skip new placement
+                            print(f"Pending order {pending_order_id} still active for {symbol}, skipping new placement")
+                            state.add_reconciliation_log("placement_skipped", {
+                                "symbol": symbol,
+                                "order_id": pending_order_id,
+                                "reason": "Pending order still active on exchange"
+                            })
+                            continue
+                        else:
+                            # Order was cancelled or filled, remove from pending
+                            status = order_status.get('status', 'not found') if order_status else 'not found'
+                            print(f"Pending order {pending_order_id} for {symbol} is {status}, removing from tracking")
+                            state.remove_pending_order(symbol)
+                            state.add_reconciliation_log("pending_order_removed", {
+                                "symbol": symbol,
+                                "order_id": pending_order_id,
+                                "status": status,
+                                "message": "Pending order no longer active, removed from tracking"
+                            })
+                    except Exception as e:
+                        # If we can't fetch the order, assume it was cancelled and remove from pending
+                        print(f"Could not verify pending order {pending_order_id} for {symbol}: {e}")
+                        print(f"Removing from pending orders to allow new placement")
+                        state.remove_pending_order(symbol)
+                        state.add_reconciliation_log("pending_order_removed", {
+                            "symbol": symbol,
+                            "order_id": pending_order_id,
+                            "error": str(e),
+                            "message": "Could not verify pending order, removed from tracking"
+                        })
                 
                 # 7. Execute - cancel existing orders and place new limit order
                 client.cancel_all_orders(symbol)

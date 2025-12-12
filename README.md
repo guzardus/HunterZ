@@ -147,6 +147,7 @@ The bot implements the LuxAlgo Order Block strategy:
 - **Startup reconciliation**: Validates and reconciles all exchange orders at bot startup
 - **Orphan order handling**: Automatically cancels orders that don't match current strategy
 - **Partial fill handling**: Places TP/SL for partial fills and tracks remaining quantity
+- **Manual cancellation recovery**: If you manually cancel a limit order, bot automatically replaces it based on current OB opportunities without doubling up
 - **TP/SL Reconciliation**: 
   - Automatically repairs missing TP/SL orders for open positions
   - Detects and fixes TP/SL quantity mismatches
@@ -268,13 +269,21 @@ The bot now automatically ensures all positions have proper TP/SL orders:
    - Wait for next reconciliation cycle (up to 10 min) or restart bot
    - Verify missing order is recreated
 
-2. **Quantity Mismatch Test**:
+2. **Manual Limit Order Cancellation**:
+   - Start bot with testnet
+   - Wait for bot to place a limit entry order for an OB
+   - Manually cancel the limit order on Binance UI
+   - Bot will detect the cancellation on next cycle (2 min)
+   - If OB opportunity still exists, bot will place the order back
+   - No duplicate orders will be created
+
+3. **Quantity Mismatch Test**:
    - Open a position
    - Manually modify TP/SL order quantity on Binance
    - Restart bot or wait for reconciliation
    - Verify old orders are cancelled and new ones created with correct size
 
-3. **Restart Test**:
+4. **Restart Test**:
    - Stop bot with open position
    - Restart bot
    - Check console for position reconciliation output
