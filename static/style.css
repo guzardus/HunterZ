@@ -269,6 +269,15 @@ tbody tr:last-child td {
     padding: 32px !important;
 }
 
+.chart-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #94a3b8;
+    text-align: center;
+}
+
 .positive {
     color: var(--signal-green) !important;
     font-weight: 400;

@@ -4,6 +4,9 @@ import datetime
 import json
 import os
 
+# Configuration constants
+MAX_BALANCE_HISTORY_POINTS = 500  # About 40 hours at 5-minute intervals
+
 @dataclass
 class Metrics:
     """Metrics for tracking order activities"""
@@ -46,7 +49,7 @@ def update_full_balance(total: float, free: float, used: float):
     bot_state.balance = total  # Keep backward compatibility
     bot_state.last_update = datetime.datetime.now().isoformat()
     
-    # Track balance history (keep last 500 data points)
+    # Track balance history
     timestamp = datetime.datetime.now().isoformat()
     bot_state.balance_history.append({
         'timestamp': timestamp,
@@ -56,9 +59,9 @@ def update_full_balance(total: float, free: float, used: float):
         'total_pnl': bot_state.total_pnl
     })
     
-    # Keep only last 500 data points (about 40 hours at 5-min intervals)
-    if len(bot_state.balance_history) > 500:
-        bot_state.balance_history = bot_state.balance_history[-500:]
+    # Keep only last MAX_BALANCE_HISTORY_POINTS data points
+    if len(bot_state.balance_history) > MAX_BALANCE_HISTORY_POINTS:
+        bot_state.balance_history = bot_state.balance_history[-MAX_BALANCE_HISTORY_POINTS:]
 
 def update_exchange_open_orders(orders: List[Dict]):
     """Update the list of open orders from the exchange.

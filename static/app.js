@@ -147,7 +147,7 @@ function initializePortfolioChart() {
         console.warn('LightweightCharts library not loaded. Portfolio chart will not be displayed.');
         const chartElement = document.getElementById('portfolio-chart');
         if (chartElement) {
-            chartElement.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8; text-align: center;">📊<br>Portfolio chart will display when data is available</div>';
+            chartElement.innerHTML = '<div class="chart-fallback">📊<br>Portfolio chart will display when data is available</div>';
         }
         return;
     }
@@ -359,21 +359,30 @@ async function updatePortfolioChart() {
         if (!portfolioSeries) return;
         
         const response = await fetch('/api/portfolio-history');
+        
+        // Check for HTTP errors
+        if (!response.ok) {
+            console.error(`Failed to fetch portfolio history: ${response.status}`);
+            return;
+        }
+        
         const data = await response.json();
         
         if (!data.history || data.history.length === 0) {
             return;
         }
         
-        // Transform data for LightweightCharts
-        const chartData = data.history.map(point => {
-            // Parse ISO timestamp to Unix timestamp
-            const timestamp = Math.floor(new Date(point.timestamp).getTime() / 1000);
-            return {
-                time: timestamp,
-                value: point.total_balance
-            };
-        });
+        // Transform data for LightweightCharts with validation
+        const chartData = data.history
+            .filter(point => point && point.timestamp && point.total_balance != null)
+            .map(point => {
+                // Parse ISO timestamp to Unix timestamp
+                const timestamp = Math.floor(new Date(point.timestamp).getTime() / 1000);
+                return {
+                    time: timestamp,
+                    value: point.total_balance
+                };
+            });
         
         // Sort by time (ascending)
         chartData.sort((a, b) => a.time - b.time);
