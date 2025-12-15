@@ -145,7 +145,10 @@ def update_position(symbol: str, position: Dict):
             
             # Preserve entry_time if position already exists, otherwise set current time
             existing_pos = bot_state.positions.get(symbol)
-            entry_time = existing_pos.get('entry_time') if existing_pos else datetime.datetime.now().isoformat()
+            if existing_pos and 'entry_time' in existing_pos:
+                entry_time = existing_pos['entry_time']
+            else:
+                entry_time = datetime.datetime.now().isoformat()
             
             bot_state.positions[symbol] = {
                 'symbol': symbol,

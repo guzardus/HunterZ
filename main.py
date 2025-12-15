@@ -416,6 +416,74 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         })
         return False
 
+def reconcile_existing_positions_with_trades(client):
+    """Reconcile existing open positions with trade history.
+    
+    When the bot starts, there may be open positions from previous runs
+    that don't have corresponding entries in trade history. This function
+    creates those entries so the positions are properly tracked.
+    
+    Args:
+        client: BinanceClient instance
+    """
+    print("\n=== Reconciling Existing Positions with Trade History ===")
+    
+    try:
+        # Fetch all open positions from exchange
+        positions = client.get_all_positions()
+        print(f"Found {len(positions)} open positions on exchange")
+        
+        for position in positions:
+            symbol = position.get('symbol')
+            if not symbol:
+                continue
+            
+            # Check if there's already an open trade for this symbol
+            has_open_trade = any(
+                t.get('symbol') == symbol and t.get('status') == 'OPEN'
+                for t in state.bot_state.trade_history
+            )
+            
+            if not has_open_trade:
+                # Create a trade entry for this position
+                position_amount = float(position.get('contracts', position.get('positionAmt', 0)) or 0)
+                if position_amount == 0:
+                    continue
+                
+                entry_price = float(position.get('entryPrice', 0) or 0)
+                side = 'LONG' if position_amount > 0 else 'SHORT'
+                
+                print(f"Creating trade entry for existing position: {symbol} {side}")
+                
+                # Get TP/SL from open orders if available
+                tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
+                tp_price = None
+                sl_price = None
+                
+                if tp_sl_orders['tp_order']:
+                    tp_price = float(tp_sl_orders['tp_order'].get('stopPrice', 0) or 0)
+                if tp_sl_orders['sl_order']:
+                    sl_price = float(tp_sl_orders['sl_order'].get('stopPrice', 0) or 0)
+                
+                state.add_trade({
+                    'symbol': symbol,
+                    'side': side,
+                    'entry_price': entry_price,
+                    'exit_price': None,
+                    'size': abs(position_amount),
+                    'pnl': None,
+                    'status': 'OPEN',
+                    'take_profit': tp_price,
+                    'stop_loss': sl_price,
+                    'entry_time': None  # Unknown for existing positions
+                })
+                print(f"✓ Trade entry created for {symbol}")
+        
+        print(f"=== Position-Trade Reconciliation Complete ===\n")
+        
+    except Exception as e:
+        print(f"Error reconciling positions with trades: {e}")
+
 def reconcile_all_positions_tp_sl(client):
     """Reconcile TP/SL orders for all open positions.
     
@@ -442,6 +510,9 @@ def reconcile_all_positions_tp_sl(client):
             symbol = position.get('symbol')
             if not symbol:
                 continue
+            
+            # Update position in state to ensure it's tracked
+            state.update_position(symbol, position)
             
             # Check if there's a pending order for this symbol
             pending = state.get_pending_order(symbol)
@@ -480,6 +551,9 @@ def run_bot_logic():
     
     # Reconcile positions and their TP/SL orders at startup
     reconcile_all_positions_tp_sl(client)
+    
+    # Reconcile existing positions with trade history
+    reconcile_existing_positions_with_trades(client)
     
     # Track last reconciliation time
     import time as time_module
