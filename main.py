@@ -165,6 +165,7 @@ def reconcile_live_orders(client):
                             client.exchange.cancel_order(order_id, symbol)
                             print(f"Cancelled orphaned order {order_id}")
                             state.bot_state.metrics.cancelled_orders_count += 1
+                            state.save_metrics()
                             state.add_reconciliation_log("order_cancelled", {
                                 "order_id": order_id,
                                 "symbol": symbol,
@@ -172,8 +173,6 @@ def reconcile_live_orders(client):
                             })
                         except Exception as e:
                             print(f"Failed to cancel order {order_id}: {e}")
-                        finally:
-                            state.save_metrics()
             except Exception as e:
                 print(f"Error reconciling order {order_id}: {e}")
         else:

@@ -286,10 +286,16 @@ const MS_PER_DAY = 86400000;
 
 // Calculate duration from entry time to now
 function calculateDuration(entryTime) {
-    if (!entryTime) return '-';
+    if (!entryTime || (typeof entryTime === 'string' && entryTime.trim() === '')) {
+        return '-';
+    }
     
     try {
         const entryDate = new Date(entryTime);
+        // Check if date is valid
+        if (isNaN(entryDate.getTime())) {
+            return '-';
+        }
         const now = new Date();
         const durationMs = now - entryDate;
         
