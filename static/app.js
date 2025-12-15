@@ -17,6 +17,8 @@ const charts = {};
 const candlestickSeries = {};
 const orderBlockSeries = {};
 const markerSeries = {};
+let portfolioChart = null;
+let portfolioSeries = null;
 const UPDATE_INTERVAL = 300000; // Update every 5 minutes (300 seconds)
 let lastUpdateTime = Date.now();
 let limitOrdersCount = 0;
@@ -137,6 +139,89 @@ function initializeCharts() {
             }).observe(chartElement);
         }
     });
+}
+
+// Initialize portfolio chart
+function initializePortfolioChart() {
+    if (typeof LightweightCharts === 'undefined') {
+        console.warn('LightweightCharts library not loaded. Portfolio chart will not be displayed.');
+        const chartElement = document.getElementById('portfolio-chart');
+        if (chartElement) {
+            chartElement.innerHTML = '<div class="chart-fallback">📊<br>Portfolio chart will display when data is available</div>';
+        }
+        return;
+    }
+    
+    const chartElement = document.getElementById('portfolio-chart');
+    if (!chartElement) return;
+    
+    portfolioChart = LightweightCharts.createChart(chartElement, {
+        width: chartElement.clientWidth,
+        height: 300,
+        layout: {
+            background: { 
+                type: 'solid',
+                color: 'transparent'
+            },
+            textColor: 'rgba(255, 255, 255, 0.7)',
+        },
+        grid: {
+            vertLines: { 
+                color: 'rgba(255, 255, 255, 0.02)',
+                style: 1,
+            },
+            horzLines: { 
+                color: 'rgba(255, 255, 255, 0.05)',
+                style: 1,
+            },
+        },
+        crosshair: {
+            mode: LightweightCharts.CrosshairMode.Normal,
+            vertLine: {
+                color: 'rgba(255, 255, 255, 0.3)',
+                width: 1,
+                style: 2,
+            },
+            horzLine: {
+                color: 'rgba(255, 255, 255, 0.3)',
+                width: 1,
+                style: 2,
+            },
+        },
+        rightPriceScale: {
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            scaleMargins: {
+                top: 0.1,
+                bottom: 0.1,
+            },
+        },
+        timeScale: {
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            timeVisible: true,
+            secondsVisible: false,
+        },
+    });
+    
+    // Create area series for portfolio balance
+    portfolioSeries = portfolioChart.addAreaSeries({
+        topColor: 'rgba(74, 222, 128, 0.4)',
+        bottomColor: 'rgba(74, 222, 128, 0.05)',
+        lineColor: '#4ADE80',
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        lastValueVisible: true,
+        priceLineVisible: true,
+    });
+    
+    // Make chart responsive
+    new ResizeObserver(entries => {
+        if (entries.length === 0 || entries[0].target !== chartElement) {
+            return;
+        }
+        const newRect = entries[0].contentRect;
+        portfolioChart.applyOptions({ width: newRect.width });
+    }).observe(chartElement);
 }
 
 // Fetch and update status
@@ -265,6 +350,47 @@ async function updateMetrics() {
         }
     } catch (error) {
         console.error('Error updating metrics:', error);
+    }
+}
+
+// Fetch and update portfolio chart
+async function updatePortfolioChart() {
+    try {
+        if (!portfolioSeries) return;
+        
+        const response = await fetch('/api/portfolio-history');
+        
+        // Check for HTTP errors
+        if (!response.ok) {
+            console.error(`Failed to fetch portfolio history: ${response.status}`);
+            return;
+        }
+        
+        const data = await response.json();
+        
+        if (!data.history || data.history.length === 0) {
+            return;
+        }
+        
+        // Transform data for LightweightCharts with validation
+        const chartData = data.history
+            .filter(point => point && point.timestamp && point.total_balance != null)
+            .map(point => {
+                // Parse ISO timestamp to Unix timestamp
+                const timestamp = Math.floor(new Date(point.timestamp).getTime() / 1000);
+                return {
+                    time: timestamp,
+                    value: point.total_balance
+                };
+            });
+        
+        // Sort by time (ascending)
+        chartData.sort((a, b) => a.time - b.time);
+        
+        // Update the chart
+        portfolioSeries.setData(chartData);
+    } catch (error) {
+        console.error('Error updating portfolio chart:', error);
     }
 }
 
@@ -691,6 +817,31 @@ async function updateMarketData() {
     }
 }
 
+/**
+ * Calculate percentage difference between two prices
+ * @param {number} fromPrice - Starting price (entry)
+ * @param {number} toPrice - Target price (TP or SL)
+ * @returns {string} - Formatted percentage string (e.g., "+2.5" or "-1.2")
+ */
+function calculatePercentageChange(fromPrice, toPrice) {
+    if (!fromPrice || fromPrice === 0) return "0.0";
+    const change = ((toPrice - fromPrice) / fromPrice) * 100;
+    return change.toFixed(1);
+}
+
+/**
+ * Format price with proper decimal places and commas
+ * @param {number} price - Price value
+ * @returns {string} - Formatted price string
+ */
+function formatPrice(price) {
+    if (price == null) return "0.00";
+    return price.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
 // Draw order blocks on chart with zones, entry, TP, and SL
 function drawOrderBlocks(symbolKey, orderBlocks, position) {
     const chart = charts[symbolKey];
@@ -717,104 +868,96 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
     
     const markers = [];
     
-    // Draw order block zones as rectangles
+    // Draw OB ZONES - Using prominent boundary lines to define the zone
+    // Note: LightweightCharts v4.1.1 doesn't have native rectangle primitives
+    // The dashed boundary lines with clear labels provide strong visual definition
     orderBlocks.forEach(ob => {
         if (!ob.time || !ob.ob_top || !ob.ob_bottom) return;
         
-        // Create a line series for the order block zone
-        const lineSeries = chart.addLineSeries({
-            color: ob.type === 'bullish' ? 'rgba(74, 222, 128, 0.2)' : 'rgba(244, 63, 94, 0.2)',
-            lineWidth: 0,
-            lastValueVisible: false,
-            priceLineVisible: false,
+        // Draw boundary lines (dashed) - These clearly define the OB zone
+        const boundaryColor = ob.type === 'bullish' ? '#4ADE80' : '#F43F5E';
+        
+        // Top boundary - entry level for bullish, top of zone for bearish
+        series.createPriceLine({
+            price: ob.ob_top,
+            color: boundaryColor,
+            lineWidth: 2, // Increased thickness for better visibility
+            lineStyle: 2, // Dashed
+            axisLabelVisible: true,
+            title: ob.type === 'bullish' 
+                ? `🟢 OB Entry $${formatPrice(ob.ob_top)}`
+                : `🔴 OB Top $${formatPrice(ob.ob_top)}`,
         });
         
-        // Draw the zone using price lines
-        const priceLineTop = {
-            price: ob.ob_top,
-            color: ob.type === 'bullish' ? '#4ADE80' : '#F43F5E',
-            lineWidth: 1,
-            lineStyle: 2, // Dashed
-            axisLabelVisible: true,
-            title: ob.type === 'bullish' ? '🟢 OB Top' : '🔴 OB Top',
-        };
-        
-        const priceLineBottom = {
+        // Bottom boundary - bottom of zone for bullish, entry level for bearish
+        series.createPriceLine({
             price: ob.ob_bottom,
-            color: ob.type === 'bullish' ? '#4ADE80' : '#F43F5E',
-            lineWidth: 1,
+            color: boundaryColor,
+            lineWidth: 2, // Increased thickness for better visibility
             lineStyle: 2, // Dashed
             axisLabelVisible: true,
-            title: ob.type === 'bullish' ? '🟢 OB Bot' : '🔴 OB Bot',
-        };
+            title: ob.type === 'bullish'
+                ? `🟢 OB Bottom $${formatPrice(ob.ob_bottom)}`
+                : `🔴 OB Entry $${formatPrice(ob.ob_bottom)}`,
+        });
         
-        series.createPriceLine(priceLineTop);
-        series.createPriceLine(priceLineBottom);
-        
-        orderBlockSeries[symbolKey].push(lineSeries);
-        
-        // Add marker at the order block location
-        if (ob.type === 'bullish') {
-            markers.push({
-                time: ob.time,
-                position: 'belowBar',
-                color: '#4ADE80',
-                shape: 'arrowUp',
-                text: `Bullish OB`,
-                size: 1
-            });
-        } else if (ob.type === 'bearish') {
-            markers.push({
-                time: ob.time,
-                position: 'aboveBar',
-                color: '#F43F5E',
-                shape: 'arrowDown',
-                text: `Bearish OB`,
-                size: 1
-            });
-        }
+        // Add formation marker arrow
+        markers.push({
+            time: ob.time,
+            position: ob.type === 'bullish' ? 'belowBar' : 'aboveBar',
+            color: boundaryColor,
+            shape: ob.type === 'bullish' ? 'arrowUp' : 'arrowDown',
+            text: `${ob.type === 'bullish' ? '🟢' : '🔴'} OB`,
+            size: 1
+        });
     });
     
-    // Add position markers (Entry, TP, SL)
+    // Draw POSITION LINES (Entry, TP, SL) - if position exists
     if (position && position.entry_price) {
-        // Entry marker
-        const entryLine = {
-            price: position.entry_price,
-            color: '#FFFFFF',
-            lineWidth: 2,
+        const entryPrice = position.entry_price;
+        
+        // ENTRY LINE - Most prominent, cyan color
+        series.createPriceLine({
+            price: entryPrice,
+            color: '#00D9FF', // Bright cyan
+            lineWidth: 3,
             lineStyle: 0, // Solid
             axisLabelVisible: true,
-            title: '🎯 Entry',
-        };
-        series.createPriceLine(entryLine);
+            title: `🎯 ENTRY $${formatPrice(entryPrice)}`,
+        });
         
-        // Take Profit marker
+        // TAKE PROFIT LINE
         if (position.take_profit) {
-            const tpLine = {
-                price: position.take_profit,
-                color: '#4ADE80',
-                lineWidth: 2,
+            const tpPrice = position.take_profit;
+            const tpPercent = calculatePercentageChange(entryPrice, tpPrice);
+            
+            series.createPriceLine({
+                price: tpPrice,
+                color: '#4ADE80', // Bright green
+                lineWidth: 3,
                 lineStyle: 0,
                 axisLabelVisible: true,
-                title: '✅ TP',
-            };
-            series.createPriceLine(tpLine);
+                title: `✅ TP $${formatPrice(tpPrice)} (+${tpPercent}%)`,
+            });
         }
         
-        // Stop Loss marker
+        // STOP LOSS LINE
         if (position.stop_loss) {
-            const slLine = {
-                price: position.stop_loss,
-                color: '#F43F5E',
-                lineWidth: 2,
+            const slPrice = position.stop_loss;
+            const slPercent = calculatePercentageChange(entryPrice, slPrice);
+            
+            series.createPriceLine({
+                price: slPrice,
+                color: '#F43F5E', // Bright red
+                lineWidth: 3,
                 lineStyle: 0,
                 axisLabelVisible: true,
-                title: '❌ SL',
-            };
-            series.createPriceLine(slLine);
+                title: `❌ SL $${formatPrice(slPrice)} (${slPercent}%)`,
+            });
         }
     }
     
+    // Apply markers
     if (markers.length > 0) {
         series.setMarkers(markers);
     }
@@ -829,7 +972,8 @@ async function updateAll() {
         updatePendingOrders(),
         updateTrades(),
         updateMarketData(),
-        updateMetrics()
+        updateMetrics(),
+        updatePortfolioChart()
     ]);
 }
 
@@ -839,6 +983,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize charts
     initializeCharts();
+    initializePortfolioChart();
     
     // Initial update
     updateAll();

@@ -4,6 +4,9 @@ import datetime
 import json
 import os
 
+# Configuration constants
+MAX_BALANCE_HISTORY_POINTS = 500  # About 40 hours at 5-minute intervals
+
 @dataclass
 class Metrics:
     """Metrics for tracking order activities"""
@@ -30,6 +33,7 @@ class BotState:
     orphaned_orders: List[Dict] = field(default_factory=list) # Orders found on exchange but not in state
     reconciliation_log: List[Dict] = field(default_factory=list) # Log of reconciliation actions
     metrics: Metrics = field(default_factory=Metrics)
+    balance_history: List[Dict] = field(default_factory=list) # Portfolio balance over time
 
 # Global instance
 bot_state = BotState()
@@ -39,11 +43,25 @@ def update_balance(balance: float):
     bot_state.last_update = datetime.datetime.now().isoformat()
 
 def update_full_balance(total: float, free: float, used: float):
-    """Update complete balance information."""
+    """Update complete balance information and track history."""
     bot_state.total_balance = total
     bot_state.free_balance = free
     bot_state.balance = total  # Keep backward compatibility
     bot_state.last_update = datetime.datetime.now().isoformat()
+    
+    # Track balance history
+    timestamp = datetime.datetime.now().isoformat()
+    bot_state.balance_history.append({
+        'timestamp': timestamp,
+        'total_balance': total,
+        'free_balance': free,
+        'used_balance': used,
+        'total_pnl': bot_state.total_pnl
+    })
+    
+    # Keep only last MAX_BALANCE_HISTORY_POINTS data points
+    if len(bot_state.balance_history) > MAX_BALANCE_HISTORY_POINTS:
+        bot_state.balance_history = bot_state.balance_history[-MAX_BALANCE_HISTORY_POINTS:]
 
 def update_exchange_open_orders(orders: List[Dict]):
     """Update the list of open orders from the exchange.
