@@ -142,6 +142,14 @@ def update_position(symbol: str, position: Dict):
             
             # Note: TP/SL will be derived from open orders via compute_position_tp_sl()
             # We keep the position fields for backward compatibility
+            
+            # Preserve entry_time if position already exists, otherwise set current time
+            existing_pos = bot_state.positions.get(symbol)
+            if existing_pos and 'entry_time' in existing_pos:
+                entry_time = existing_pos['entry_time']
+            else:
+                entry_time = datetime.datetime.now().isoformat()
+            
             bot_state.positions[symbol] = {
                 'symbol': symbol,
                 'side': side,
@@ -150,6 +158,7 @@ def update_position(symbol: str, position: Dict):
                 'mark_price': mark_price,
                 'unrealized_pnl': unrealized_pnl,
                 'leverage': leverage,
+                'entry_time': entry_time,  # Track when position was opened
                 'take_profit': position.get('take_profit'),  # Kept for backward compatibility
                 'stop_loss': position.get('stop_loss')  # Kept for backward compatibility
             }
@@ -279,6 +288,9 @@ def _close_trade_in_history(symbol: str, old_position: Dict):
             # Update total PnL
             bot_state.total_pnl += pnl
             
+            # Save trade history after closing a trade
+            save_trade_history()
+            
             print(f"Trade closed for {symbol}: PnL = {pnl:.2f} USDT")
             break
 
@@ -288,6 +300,7 @@ def add_trade(trade: Dict):
     bot_state.trade_history.insert(0, trade)
     # Keep only last 100 trades
     bot_state.trade_history = bot_state.trade_history[:100]
+    save_trade_history()
 
 def update_total_pnl(pnl: float):
     """Update total PnL"""
@@ -316,6 +329,8 @@ def get_pending_order(symbol: str):
 
 # Persistence functions
 PENDING_ORDERS_FILE = os.path.join(os.path.dirname(__file__), 'data', 'pending_orders.json')
+METRICS_FILE = os.path.join(os.path.dirname(__file__), 'data', 'metrics.json')
+TRADE_HISTORY_FILE = os.path.join(os.path.dirname(__file__), 'data', 'trade_history.json')
 
 def save_pending_orders():
     """Save pending orders to disk"""
@@ -355,8 +370,82 @@ def add_reconciliation_log(action: str, details: Dict):
     # Keep only last 50 entries
     bot_state.reconciliation_log = bot_state.reconciliation_log[:50]
 
+def save_metrics():
+    """Save metrics to disk"""
+    try:
+        os.makedirs(os.path.dirname(METRICS_FILE), exist_ok=True)
+        metrics_data = {
+            'pending_orders_count': bot_state.metrics.pending_orders_count,
+            'open_exchange_orders_count': bot_state.metrics.open_exchange_orders_count,
+            'placed_orders_count': bot_state.metrics.placed_orders_count,
+            'cancelled_orders_count': bot_state.metrics.cancelled_orders_count,
+            'filled_orders_count': bot_state.metrics.filled_orders_count
+        }
+        with open(METRICS_FILE, 'w') as f:
+            json.dump(metrics_data, f, indent=2)
+    except Exception as e:
+        print(f"WARNING: Failed to save metrics: {e}")
+
+def load_metrics_on_startup():
+    """Load metrics from disk"""
+    try:
+        if os.path.exists(METRICS_FILE):
+            with open(METRICS_FILE, 'r') as f:
+                loaded = json.load(f)
+                bot_state.metrics.pending_orders_count = loaded.get('pending_orders_count', 0)
+                bot_state.metrics.open_exchange_orders_count = loaded.get('open_exchange_orders_count', 0)
+                bot_state.metrics.placed_orders_count = loaded.get('placed_orders_count', 0)
+                bot_state.metrics.cancelled_orders_count = loaded.get('cancelled_orders_count', 0)
+                bot_state.metrics.filled_orders_count = loaded.get('filled_orders_count', 0)
+                print(f"Loaded metrics from disk: {loaded}")
+        else:
+            print("No metrics file found, starting fresh")
+    except json.JSONDecodeError as e:
+        print(f"WARNING: Corrupted metrics file, starting fresh: {e}")
+    except Exception as e:
+        print(f"WARNING: Failed to load metrics: {e}")
+
+def save_trade_history():
+    """Save trade history to disk"""
+    try:
+        os.makedirs(os.path.dirname(TRADE_HISTORY_FILE), exist_ok=True)
+        with open(TRADE_HISTORY_FILE, 'w') as f:
+            json.dump(bot_state.trade_history, f, indent=2)
+    except Exception as e:
+        print(f"WARNING: Failed to save trade history: {e}")
+
+def load_trade_history_on_startup():
+    """Load trade history from disk"""
+    try:
+        if os.path.exists(TRADE_HISTORY_FILE):
+            with open(TRADE_HISTORY_FILE, 'r') as f:
+                loaded = json.load(f)
+                bot_state.trade_history = loaded
+                # Recalculate total P&L from closed trades
+                total = 0.0
+                for trade in loaded:
+                    if trade.get('status') == 'CLOSED' and trade.get('pnl') is not None:
+                        try:
+                            pnl_value = float(trade['pnl'])
+                            total += pnl_value
+                        except (ValueError, TypeError) as e:
+                            print(f"WARNING: Invalid P&L value in trade {trade.get('symbol', 'unknown')}: {e}")
+                            continue
+                bot_state.total_pnl = total
+                print(f"Loaded {len(loaded)} trades from disk, total P&L: {total:.2f}")
+        else:
+            print("No trade history file found, starting fresh")
+    except json.JSONDecodeError as e:
+        print(f"WARNING: Corrupted trade history file, starting fresh: {e}")
+        bot_state.trade_history = []
+    except Exception as e:
+        print(f"WARNING: Failed to load trade history: {e}")
+        bot_state.trade_history = []
+
 def init():
     """Initialize state on startup"""
     print("Initializing bot state...")
     load_pending_orders_on_startup()
+    load_metrics_on_startup()
+    load_trade_history_on_startup()
     print("Bot state initialized")

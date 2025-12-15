@@ -165,6 +165,7 @@ def reconcile_live_orders(client):
                             client.exchange.cancel_order(order_id, symbol)
                             print(f"Cancelled orphaned order {order_id}")
                             state.bot_state.metrics.cancelled_orders_count += 1
+                            state.save_metrics()
                             state.add_reconciliation_log("order_cancelled", {
                                 "order_id": order_id,
                                 "symbol": symbol,
@@ -206,6 +207,7 @@ def reconcile_live_orders(client):
                         })
                         if status == 'filled':
                             state.bot_state.metrics.filled_orders_count += 1
+                            state.save_metrics()
                 else:
                     print(f"Order {order_id} not found, removing from pending")
                     orphaned_symbols.append(symbol)
@@ -413,6 +415,78 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         })
         return False
 
+def reconcile_existing_positions_with_trades(client):
+    """Reconcile existing open positions with trade history.
+    
+    When the bot starts, there may be open positions from previous runs
+    that don't have corresponding entries in trade history. This function
+    creates those entries so the positions are properly tracked.
+    
+    Args:
+        client: BinanceClient instance
+    """
+    print("\n=== Reconciling Existing Positions with Trade History ===")
+    
+    try:
+        # Fetch all open positions from exchange
+        positions = client.get_all_positions()
+        print(f"Found {len(positions)} open positions on exchange")
+        
+        for position in positions:
+            symbol = position.get('symbol')
+            if not symbol:
+                continue
+            
+            # Check if there's already an open trade for this symbol
+            has_open_trade = any(
+                t.get('symbol') == symbol and t.get('status') == 'OPEN'
+                for t in state.bot_state.trade_history
+            )
+            
+            if not has_open_trade:
+                # Create a trade entry for this position
+                try:
+                    position_amount = float(position.get('contracts', position.get('positionAmt', 0)) or 0)
+                    if position_amount == 0:
+                        continue
+                    
+                    entry_price = float(position.get('entryPrice', 0) or 0)
+                except (ValueError, TypeError) as e:
+                    print(f"WARNING: Invalid position data for {symbol}: {e}")
+                    continue
+                side = 'LONG' if position_amount > 0 else 'SHORT'
+                
+                print(f"Creating trade entry for existing position: {symbol} {side}")
+                
+                # Get TP/SL from open orders if available
+                tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
+                tp_price = None
+                sl_price = None
+                
+                if tp_sl_orders and tp_sl_orders.get('tp_order'):
+                    tp_price = float(tp_sl_orders['tp_order'].get('stopPrice', 0) or 0)
+                if tp_sl_orders and tp_sl_orders.get('sl_order'):
+                    sl_price = float(tp_sl_orders['sl_order'].get('stopPrice', 0) or 0)
+                
+                state.add_trade({
+                    'symbol': symbol,
+                    'side': side,
+                    'entry_price': entry_price,
+                    'exit_price': None,
+                    'size': abs(position_amount),
+                    'pnl': None,
+                    'status': 'OPEN',
+                    'take_profit': tp_price,
+                    'stop_loss': sl_price,
+                    'entry_time': None  # Unknown for existing positions
+                })
+                print(f"✓ Trade entry created for {symbol}")
+        
+        print(f"=== Position-Trade Reconciliation Complete ===\n")
+        
+    except Exception as e:
+        print(f"Error reconciling positions with trades: {e}")
+
 def reconcile_all_positions_tp_sl(client):
     """Reconcile TP/SL orders for all open positions.
     
@@ -439,6 +513,9 @@ def reconcile_all_positions_tp_sl(client):
             symbol = position.get('symbol')
             if not symbol:
                 continue
+            
+            # Update position in state to ensure it's tracked
+            state.update_position(symbol, position)
             
             # Check if there's a pending order for this symbol
             pending = state.get_pending_order(symbol)
@@ -477,6 +554,9 @@ def run_bot_logic():
     
     # Reconcile positions and their TP/SL orders at startup
     reconcile_all_positions_tp_sl(client)
+    
+    # Reconcile existing positions with trade history
+    reconcile_existing_positions_with_trades(client)
     
     # Track last reconciliation time
     import time as time_module
@@ -520,6 +600,7 @@ def run_bot_logic():
                             if orders['sl_order'] and orders['tp_order']:
                                 print(f"TP/SL orders successfully placed for {symbol}")
                                 state.bot_state.metrics.filled_orders_count += 1
+                                state.save_metrics()
                             else:
                                 print(f"WARNING: Some TP/SL orders failed for {symbol}")
                             
@@ -575,6 +656,7 @@ def run_bot_logic():
                             print(f"Limit order {order_status.get('status')} for {symbol}. Removing from pending.")
                             if order_status.get('status') == 'canceled':
                                 state.bot_state.metrics.cancelled_orders_count += 1
+                                state.save_metrics()
                             state.remove_pending_order(symbol)
             
             # 2. Fetch Trading Pairs
@@ -729,6 +811,7 @@ def run_bot_logic():
                     # Store the order info for later TP/SL placement
                     state.add_pending_order(symbol, order['id'], params)
                     state.bot_state.metrics.placed_orders_count += 1
+                    state.save_metrics()
             
             # Note: exchange_orders count is already updated in state.update_exchange_open_orders() above
             
