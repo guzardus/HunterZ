@@ -446,11 +446,15 @@ def reconcile_existing_positions_with_trades(client):
             
             if not has_open_trade:
                 # Create a trade entry for this position
-                position_amount = float(position.get('contracts', position.get('positionAmt', 0)) or 0)
-                if position_amount == 0:
+                try:
+                    position_amount = float(position.get('contracts', position.get('positionAmt', 0)) or 0)
+                    if position_amount == 0:
+                        continue
+                    
+                    entry_price = float(position.get('entryPrice', 0) or 0)
+                except (ValueError, TypeError) as e:
+                    print(f"WARNING: Invalid position data for {symbol}: {e}")
                     continue
-                
-                entry_price = float(position.get('entryPrice', 0) or 0)
                 side = 'LONG' if position_amount > 0 else 'SHORT'
                 
                 print(f"Creating trade entry for existing position: {symbol} {side}")
@@ -460,9 +464,9 @@ def reconcile_existing_positions_with_trades(client):
                 tp_price = None
                 sl_price = None
                 
-                if tp_sl_orders['tp_order']:
+                if tp_sl_orders and tp_sl_orders.get('tp_order'):
                     tp_price = float(tp_sl_orders['tp_order'].get('stopPrice', 0) or 0)
-                if tp_sl_orders['sl_order']:
+                if tp_sl_orders and tp_sl_orders.get('sl_order'):
                     sl_price = float(tp_sl_orders['sl_order'].get('stopPrice', 0) or 0)
                 
                 state.add_trade({

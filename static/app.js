@@ -279,6 +279,11 @@ async function updateWallet() {
     }
 }
 
+// Time constants for duration calculations
+const MS_PER_MINUTE = 60000;
+const MS_PER_HOUR = 3600000;
+const MS_PER_DAY = 86400000;
+
 // Calculate duration from entry time to now
 function calculateDuration(entryTime) {
     if (!entryTime) return '-';
@@ -288,9 +293,9 @@ function calculateDuration(entryTime) {
         const now = new Date();
         const durationMs = now - entryDate;
         
-        const days = Math.floor(durationMs / 86400000);
-        const hours = Math.floor((durationMs % 86400000) / 3600000);
-        const minutes = Math.floor((durationMs % 3600000) / 60000);
+        const days = Math.floor(durationMs / MS_PER_DAY);
+        const hours = Math.floor((durationMs % MS_PER_DAY) / MS_PER_HOUR);
+        const minutes = Math.floor((durationMs % MS_PER_HOUR) / MS_PER_MINUTE);
         
         if (days > 0) {
             return `${days}d ${hours}h`;

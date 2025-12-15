@@ -425,7 +425,12 @@ def load_trade_history_on_startup():
                 total = 0.0
                 for trade in loaded:
                     if trade.get('status') == 'CLOSED' and trade.get('pnl') is not None:
-                        total += float(trade['pnl'])
+                        try:
+                            pnl_value = float(trade['pnl'])
+                            total += pnl_value
+                        except (ValueError, TypeError) as e:
+                            print(f"WARNING: Invalid P&L value in trade {trade.get('symbol', 'unknown')}: {e}")
+                            continue
                 bot_state.total_pnl = total
                 print(f"Loaded {len(loaded)} trades from disk, total P&L: {total:.2f}")
         else:
