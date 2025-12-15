@@ -172,6 +172,8 @@ def reconcile_live_orders(client):
                             })
                         except Exception as e:
                             print(f"Failed to cancel order {order_id}: {e}")
+                        finally:
+                            state.save_metrics()
             except Exception as e:
                 print(f"Error reconciling order {order_id}: {e}")
         else:
@@ -206,6 +208,7 @@ def reconcile_live_orders(client):
                         })
                         if status == 'filled':
                             state.bot_state.metrics.filled_orders_count += 1
+                            state.save_metrics()
                 else:
                     print(f"Order {order_id} not found, removing from pending")
                     orphaned_symbols.append(symbol)
@@ -520,6 +523,7 @@ def run_bot_logic():
                             if orders['sl_order'] and orders['tp_order']:
                                 print(f"TP/SL orders successfully placed for {symbol}")
                                 state.bot_state.metrics.filled_orders_count += 1
+                                state.save_metrics()
                             else:
                                 print(f"WARNING: Some TP/SL orders failed for {symbol}")
                             
@@ -575,6 +579,7 @@ def run_bot_logic():
                             print(f"Limit order {order_status.get('status')} for {symbol}. Removing from pending.")
                             if order_status.get('status') == 'canceled':
                                 state.bot_state.metrics.cancelled_orders_count += 1
+                                state.save_metrics()
                             state.remove_pending_order(symbol)
             
             # 2. Fetch Trading Pairs
@@ -729,6 +734,7 @@ def run_bot_logic():
                     # Store the order info for later TP/SL placement
                     state.add_pending_order(symbol, order['id'], params)
                     state.bot_state.metrics.placed_orders_count += 1
+                    state.save_metrics()
             
             # Note: exchange_orders count is already updated in state.update_exchange_open_orders() above
             

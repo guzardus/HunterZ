@@ -279,6 +279,31 @@ async function updateWallet() {
     }
 }
 
+// Calculate duration from entry time to now
+function calculateDuration(entryTime) {
+    if (!entryTime) return '-';
+    
+    try {
+        const entryDate = new Date(entryTime);
+        const now = new Date();
+        const durationMs = now - entryDate;
+        
+        const days = Math.floor(durationMs / 86400000);
+        const hours = Math.floor((durationMs % 86400000) / 3600000);
+        const minutes = Math.floor((durationMs % 3600000) / 60000);
+        
+        if (days > 0) {
+            return `${days}d ${hours}h`;
+        } else if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        } else {
+            return `${minutes}m`;
+        }
+    } catch (e) {
+        return '-';
+    }
+}
+
 // Fetch and update positions with TP/SL info
 async function updatePositions() {
     try {
@@ -288,7 +313,9 @@ async function updatePositions() {
         const tbody = document.getElementById('positions-tbody');
         
         if (data.positions && data.positions.length > 0) {
-            tbody.innerHTML = data.positions.map(pos => `
+            tbody.innerHTML = data.positions.map(pos => {
+                const duration = calculateDuration(pos.entry_time);
+                return `
                 <tr>
                     <td>${pos.symbol}</td>
                     <td class="${pos.side === 'LONG' ? 'positive' : 'negative'}">${pos.side}</td>
@@ -299,12 +326,14 @@ async function updatePositions() {
                         ${pos.unrealized_pnl.toFixed(2)} USDT
                     </td>
                     <td>${pos.leverage}x</td>
+                    <td>${duration}</td>
                     <td>${pos.take_profit ? '$' + pos.take_profit.toFixed(2) : '-'}</td>
                     <td>${pos.stop_loss ? '$' + pos.stop_loss.toFixed(2) : '-'}</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
         } else {
-            tbody.innerHTML = '<tr><td colspan="9" class="no-data">No active positions</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="no-data">No active positions</td></tr>';
         }
     } catch (error) {
         console.error('Error updating positions:', error);
