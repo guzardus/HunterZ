@@ -189,5 +189,19 @@ def get_exchange_orders():
         "orders": state.bot_state.exchange_open_orders
     }
 
+@app.get("/api/portfolio-history")
+def get_portfolio_history():
+    """Get portfolio balance history over time for charting.
+    
+    Returns historical balance data including:
+    - Total balance (equity)
+    - Free balance (available funds)
+    - Used balance (in positions)
+    - Total P&L
+    """
+    return {
+        "history": state.bot_state.balance_history
+    }
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

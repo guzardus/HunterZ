@@ -17,6 +17,8 @@ const charts = {};
 const candlestickSeries = {};
 const orderBlockSeries = {};
 const markerSeries = {};
+let portfolioChart = null;
+let portfolioSeries = null;
 const UPDATE_INTERVAL = 300000; // Update every 5 minutes (300 seconds)
 let lastUpdateTime = Date.now();
 let limitOrdersCount = 0;
@@ -137,6 +139,89 @@ function initializeCharts() {
             }).observe(chartElement);
         }
     });
+}
+
+// Initialize portfolio chart
+function initializePortfolioChart() {
+    if (typeof LightweightCharts === 'undefined') {
+        console.warn('LightweightCharts library not loaded. Portfolio chart will not be displayed.');
+        const chartElement = document.getElementById('portfolio-chart');
+        if (chartElement) {
+            chartElement.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8; text-align: center;">📊<br>Portfolio chart will display when data is available</div>';
+        }
+        return;
+    }
+    
+    const chartElement = document.getElementById('portfolio-chart');
+    if (!chartElement) return;
+    
+    portfolioChart = LightweightCharts.createChart(chartElement, {
+        width: chartElement.clientWidth,
+        height: 300,
+        layout: {
+            background: { 
+                type: 'solid',
+                color: 'transparent'
+            },
+            textColor: 'rgba(255, 255, 255, 0.7)',
+        },
+        grid: {
+            vertLines: { 
+                color: 'rgba(255, 255, 255, 0.02)',
+                style: 1,
+            },
+            horzLines: { 
+                color: 'rgba(255, 255, 255, 0.05)',
+                style: 1,
+            },
+        },
+        crosshair: {
+            mode: LightweightCharts.CrosshairMode.Normal,
+            vertLine: {
+                color: 'rgba(255, 255, 255, 0.3)',
+                width: 1,
+                style: 2,
+            },
+            horzLine: {
+                color: 'rgba(255, 255, 255, 0.3)',
+                width: 1,
+                style: 2,
+            },
+        },
+        rightPriceScale: {
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            scaleMargins: {
+                top: 0.1,
+                bottom: 0.1,
+            },
+        },
+        timeScale: {
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            timeVisible: true,
+            secondsVisible: false,
+        },
+    });
+    
+    // Create area series for portfolio balance
+    portfolioSeries = portfolioChart.addAreaSeries({
+        topColor: 'rgba(74, 222, 128, 0.4)',
+        bottomColor: 'rgba(74, 222, 128, 0.05)',
+        lineColor: '#4ADE80',
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        lastValueVisible: true,
+        priceLineVisible: true,
+    });
+    
+    // Make chart responsive
+    new ResizeObserver(entries => {
+        if (entries.length === 0 || entries[0].target !== chartElement) {
+            return;
+        }
+        const newRect = entries[0].contentRect;
+        portfolioChart.applyOptions({ width: newRect.width });
+    }).observe(chartElement);
 }
 
 // Fetch and update status
@@ -265,6 +350,38 @@ async function updateMetrics() {
         }
     } catch (error) {
         console.error('Error updating metrics:', error);
+    }
+}
+
+// Fetch and update portfolio chart
+async function updatePortfolioChart() {
+    try {
+        if (!portfolioSeries) return;
+        
+        const response = await fetch('/api/portfolio-history');
+        const data = await response.json();
+        
+        if (!data.history || data.history.length === 0) {
+            return;
+        }
+        
+        // Transform data for LightweightCharts
+        const chartData = data.history.map(point => {
+            // Parse ISO timestamp to Unix timestamp
+            const timestamp = Math.floor(new Date(point.timestamp).getTime() / 1000);
+            return {
+                time: timestamp,
+                value: point.total_balance
+            };
+        });
+        
+        // Sort by time (ascending)
+        chartData.sort((a, b) => a.time - b.time);
+        
+        // Update the chart
+        portfolioSeries.setData(chartData);
+    } catch (error) {
+        console.error('Error updating portfolio chart:', error);
     }
 }
 
@@ -846,7 +963,8 @@ async function updateAll() {
         updatePendingOrders(),
         updateTrades(),
         updateMarketData(),
-        updateMetrics()
+        updateMetrics(),
+        updatePortfolioChart()
     ]);
 }
 
@@ -856,6 +974,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize charts
     initializeCharts();
+    initializePortfolioChart();
     
     // Initial update
     updateAll();
