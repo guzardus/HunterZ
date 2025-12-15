@@ -691,6 +691,31 @@ async function updateMarketData() {
     }
 }
 
+/**
+ * Calculate percentage difference between two prices
+ * @param {number} fromPrice - Starting price (entry)
+ * @param {number} toPrice - Target price (TP or SL)
+ * @returns {string} - Formatted percentage string (e.g., "+2.5" or "-1.2")
+ */
+function calculatePercentageChange(fromPrice, toPrice) {
+    if (!fromPrice || fromPrice === 0) return "0.0";
+    const change = ((toPrice - fromPrice) / fromPrice) * 100;
+    return change.toFixed(1);
+}
+
+/**
+ * Format price with proper decimal places and commas
+ * @param {number} price - Price value
+ * @returns {string} - Formatted price string
+ */
+function formatPrice(price) {
+    if (!price) return "0.00";
+    return price.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
 // Draw order blocks on chart with zones, entry, TP, and SL
 function drawOrderBlocks(symbolKey, orderBlocks, position) {
     const chart = charts[symbolKey];
@@ -717,104 +742,118 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
     
     const markers = [];
     
-    // Draw order block zones as rectangles
+    // Draw OB ZONES with filled rectangles
     orderBlocks.forEach(ob => {
         if (!ob.time || !ob.ob_top || !ob.ob_bottom) return;
         
-        // Create a line series for the order block zone
-        const lineSeries = chart.addLineSeries({
-            color: ob.type === 'bullish' ? 'rgba(74, 222, 128, 0.2)' : 'rgba(244, 63, 94, 0.2)',
+        // Create area series for filled zone background
+        const areaColor = ob.type === 'bullish' 
+            ? 'rgba(74, 222, 128, 0.15)' 
+            : 'rgba(244, 63, 94, 0.15)';
+        
+        // Create area series spanning from OB time to end
+        const zoneSeries = chart.addAreaSeries({
+            topColor: areaColor,
+            bottomColor: areaColor,
+            lineColor: 'transparent',
             lineWidth: 0,
             lastValueVisible: false,
             priceLineVisible: false,
         });
         
-        // Draw the zone using price lines
-        const priceLineTop = {
+        // Set data to create filled rectangle effect
+        // We need to extend the zone to the current time or end of chart
+        zoneSeries.setData([
+            { time: ob.time, value: ob.ob_top },
+            { time: ob.time, value: ob.ob_bottom }
+        ]);
+        
+        orderBlockSeries[symbolKey].push(zoneSeries);
+        
+        // Draw boundary lines (dashed)
+        const boundaryColor = ob.type === 'bullish' ? '#4ADE80' : '#F43F5E';
+        
+        // Top boundary
+        series.createPriceLine({
             price: ob.ob_top,
-            color: ob.type === 'bullish' ? '#4ADE80' : '#F43F5E',
+            color: boundaryColor,
             lineWidth: 1,
             lineStyle: 2, // Dashed
             axisLabelVisible: true,
-            title: ob.type === 'bullish' ? '🟢 OB Top' : '🔴 OB Top',
-        };
+            title: ob.type === 'bullish' 
+                ? `🟢 OB Entry $${formatPrice(ob.ob_top)}`
+                : `🔴 OB Top $${formatPrice(ob.ob_top)}`,
+        });
         
-        const priceLineBottom = {
+        // Bottom boundary
+        series.createPriceLine({
             price: ob.ob_bottom,
-            color: ob.type === 'bullish' ? '#4ADE80' : '#F43F5E',
+            color: boundaryColor,
             lineWidth: 1,
-            lineStyle: 2, // Dashed
+            lineStyle: 2,
             axisLabelVisible: true,
-            title: ob.type === 'bullish' ? '🟢 OB Bot' : '🔴 OB Bot',
-        };
+            title: ob.type === 'bullish'
+                ? `🟢 OB Bottom $${formatPrice(ob.ob_bottom)}`
+                : `🔴 OB Entry $${formatPrice(ob.ob_bottom)}`,
+        });
         
-        series.createPriceLine(priceLineTop);
-        series.createPriceLine(priceLineBottom);
-        
-        orderBlockSeries[symbolKey].push(lineSeries);
-        
-        // Add marker at the order block location
-        if (ob.type === 'bullish') {
-            markers.push({
-                time: ob.time,
-                position: 'belowBar',
-                color: '#4ADE80',
-                shape: 'arrowUp',
-                text: `Bullish OB`,
-                size: 1
-            });
-        } else if (ob.type === 'bearish') {
-            markers.push({
-                time: ob.time,
-                position: 'aboveBar',
-                color: '#F43F5E',
-                shape: 'arrowDown',
-                text: `Bearish OB`,
-                size: 1
-            });
-        }
+        // Add formation marker arrow
+        markers.push({
+            time: ob.time,
+            position: ob.type === 'bullish' ? 'belowBar' : 'aboveBar',
+            color: boundaryColor,
+            shape: ob.type === 'bullish' ? 'arrowUp' : 'arrowDown',
+            text: `${ob.type === 'bullish' ? '🟢' : '🔴'} OB`,
+            size: 1
+        });
     });
     
-    // Add position markers (Entry, TP, SL)
+    // Draw POSITION LINES (Entry, TP, SL) - if position exists
     if (position && position.entry_price) {
-        // Entry marker
-        const entryLine = {
-            price: position.entry_price,
-            color: '#FFFFFF',
-            lineWidth: 2,
+        const entryPrice = position.entry_price;
+        
+        // ENTRY LINE - Most prominent, cyan color
+        series.createPriceLine({
+            price: entryPrice,
+            color: '#00D9FF', // Bright cyan
+            lineWidth: 3,
             lineStyle: 0, // Solid
             axisLabelVisible: true,
-            title: '🎯 Entry',
-        };
-        series.createPriceLine(entryLine);
+            title: `🎯 ENTRY $${formatPrice(entryPrice)}`,
+        });
         
-        // Take Profit marker
+        // TAKE PROFIT LINE
         if (position.take_profit) {
-            const tpLine = {
-                price: position.take_profit,
-                color: '#4ADE80',
-                lineWidth: 2,
+            const tpPrice = position.take_profit;
+            const tpPercent = calculatePercentageChange(entryPrice, tpPrice);
+            
+            series.createPriceLine({
+                price: tpPrice,
+                color: '#4ADE80', // Bright green
+                lineWidth: 3,
                 lineStyle: 0,
                 axisLabelVisible: true,
-                title: '✅ TP',
-            };
-            series.createPriceLine(tpLine);
+                title: `✅ TP $${formatPrice(tpPrice)} (+${tpPercent}%)`,
+            });
         }
         
-        // Stop Loss marker
+        // STOP LOSS LINE
         if (position.stop_loss) {
-            const slLine = {
-                price: position.stop_loss,
-                color: '#F43F5E',
-                lineWidth: 2,
+            const slPrice = position.stop_loss;
+            const slPercent = calculatePercentageChange(entryPrice, slPrice);
+            
+            series.createPriceLine({
+                price: slPrice,
+                color: '#F43F5E', // Bright red
+                lineWidth: 3,
                 lineStyle: 0,
                 axisLabelVisible: true,
-                title: '❌ SL',
-            };
-            series.createPriceLine(slLine);
+                title: `❌ SL $${formatPrice(slPrice)} (${slPercent}%)`,
+            });
         }
     }
     
+    // Apply markers
     if (markers.length > 0) {
         series.setMarkers(markers);
     }
