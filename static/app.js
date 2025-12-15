@@ -709,7 +709,7 @@ function calculatePercentageChange(fromPrice, toPrice) {
  * @returns {string} - Formatted price string
  */
 function formatPrice(price) {
-    if (!price) return "0.00";
+    if (price == null) return "0.00";
     return price.toLocaleString('en-US', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
@@ -742,42 +742,20 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
     
     const markers = [];
     
-    // Draw OB ZONES with filled rectangles
+    // Draw OB ZONES - Using prominent boundary lines to define the zone
+    // Note: LightweightCharts v4.1.1 doesn't have native rectangle primitives
+    // The dashed boundary lines with clear labels provide strong visual definition
     orderBlocks.forEach(ob => {
         if (!ob.time || !ob.ob_top || !ob.ob_bottom) return;
         
-        // Create area series for filled zone background
-        const areaColor = ob.type === 'bullish' 
-            ? 'rgba(74, 222, 128, 0.15)' 
-            : 'rgba(244, 63, 94, 0.15)';
-        
-        // Create area series spanning from OB time to end
-        const zoneSeries = chart.addAreaSeries({
-            topColor: areaColor,
-            bottomColor: areaColor,
-            lineColor: 'transparent',
-            lineWidth: 0,
-            lastValueVisible: false,
-            priceLineVisible: false,
-        });
-        
-        // Set data to create filled rectangle effect
-        // We need to extend the zone to the current time or end of chart
-        zoneSeries.setData([
-            { time: ob.time, value: ob.ob_top },
-            { time: ob.time, value: ob.ob_bottom }
-        ]);
-        
-        orderBlockSeries[symbolKey].push(zoneSeries);
-        
-        // Draw boundary lines (dashed)
+        // Draw boundary lines (dashed) - These clearly define the OB zone
         const boundaryColor = ob.type === 'bullish' ? '#4ADE80' : '#F43F5E';
         
-        // Top boundary
+        // Top boundary - entry level for bullish, top of zone for bearish
         series.createPriceLine({
             price: ob.ob_top,
             color: boundaryColor,
-            lineWidth: 1,
+            lineWidth: 2, // Increased thickness for better visibility
             lineStyle: 2, // Dashed
             axisLabelVisible: true,
             title: ob.type === 'bullish' 
@@ -785,12 +763,12 @@ function drawOrderBlocks(symbolKey, orderBlocks, position) {
                 : `🔴 OB Top $${formatPrice(ob.ob_top)}`,
         });
         
-        // Bottom boundary
+        // Bottom boundary - bottom of zone for bullish, entry level for bearish
         series.createPriceLine({
             price: ob.ob_bottom,
             color: boundaryColor,
-            lineWidth: 1,
-            lineStyle: 2,
+            lineWidth: 2, // Increased thickness for better visibility
+            lineStyle: 2, // Dashed
             axisLabelVisible: true,
             title: ob.type === 'bullish'
                 ? `🟢 OB Bottom $${formatPrice(ob.ob_bottom)}`

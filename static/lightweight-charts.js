@@ -69,12 +69,6 @@
                         createPriceLine: function() { return {}; }
                     };
                 },
-                addAreaSeries: function() {
-                    return {
-                        setData: function() {},
-                        createPriceLine: function() { return {}; }
-                    };
-                },
                 applyOptions: function(options) {
                     if (options.width) {
                         canvas.width = options.width;
