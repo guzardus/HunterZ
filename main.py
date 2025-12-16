@@ -541,6 +541,152 @@ def reconcile_all_positions_tp_sl(client):
             "message": "Error during position TP/SL reconciliation"
         })
 
+def monitor_and_close_positions(client):
+    """Monitor open positions and force-close them if TP/SL levels are breached.
+    
+    This function acts as a safety net to close positions when:
+    - TP/SL conditional orders are missing or cancelled
+    - TP/SL conditional orders fail to execute
+    - Price breaches TP/SL levels but orders don't trigger
+    
+    Args:
+        client: BinanceClient instance
+    """
+    if not config.ENABLE_ACTIVE_TP_SL_MONITORING:
+        return
+    
+    try:
+        # Get all symbols with open positions
+        position_symbols = list(state.bot_state.positions.keys())
+        
+        if not position_symbols:
+            return  # No positions to monitor
+        
+        for symbol in position_symbols:
+            try:
+                position = state.bot_state.positions.get(symbol)
+                if not position:
+                    continue
+                
+                # Extract position details
+                size = position.get('size', 0)
+                side = position.get('side', '').upper()
+                mark_price = position.get('mark_price', 0)
+                take_profit = position.get('take_profit')
+                stop_loss = position.get('stop_loss')
+                entry_price = position.get('entry_price', 0)
+                
+                # Skip if position size is 0 or invalid data
+                if size <= 0 or mark_price <= 0:
+                    continue
+                
+                # Skip if no TP/SL values are available
+                if not take_profit and not stop_loss:
+                    continue
+                
+                # Determine if position should be closed
+                should_close = False
+                close_reason = None
+                
+                if side == 'LONG':
+                    # For LONG positions:
+                    # Close if price >= TP (take profit hit)
+                    # Close if price <= SL (stop loss hit)
+                    if take_profit and mark_price >= take_profit:
+                        should_close = True
+                        close_reason = "tp_breach"
+                    elif stop_loss and mark_price <= stop_loss:
+                        should_close = True
+                        close_reason = "sl_breach"
+                elif side == 'SHORT':
+                    # For SHORT positions:
+                    # Close if price <= TP (take profit hit)
+                    # Close if price >= SL (stop loss hit)
+                    if take_profit and mark_price <= take_profit:
+                        should_close = True
+                        close_reason = "tp_breach"
+                    elif stop_loss and mark_price >= stop_loss:
+                        should_close = True
+                        close_reason = "sl_breach"
+                
+                # If breach detected, force close the position
+                if should_close and close_reason:
+                    print(f"\n⚠️ BREACH DETECTED for {symbol}!")
+                    print(f"Position: {side}, Mark Price: {mark_price}, Entry: {entry_price}")
+                    print(f"TP: {take_profit}, SL: {stop_loss}")
+                    print(f"Reason: {close_reason}")
+                    
+                    # Determine close side (opposite of position)
+                    close_side = 'sell' if side == 'LONG' else 'buy'
+                    
+                    # Format size with proper precision
+                    formatted_size = float(client.exchange.amount_to_precision(symbol, size))
+                    
+                    # Cancel existing TP/SL orders first
+                    tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
+                    cancelled_orders = []
+                    if tp_sl_orders.get('sl_order'):
+                        if client.cancel_order(symbol, tp_sl_orders['sl_order']['id']):
+                            cancelled_orders.append('SL')
+                    if tp_sl_orders.get('tp_order'):
+                        if client.cancel_order(symbol, tp_sl_orders['tp_order']['id']):
+                            cancelled_orders.append('TP')
+                    
+                    # Close position with market order
+                    market_order = client.close_position_market(symbol, close_side, formatted_size, close_reason)
+                    
+                    if market_order:
+                        # Calculate PnL for logging
+                        if side == 'LONG':
+                            pnl = (mark_price - entry_price) * size
+                        else:
+                            pnl = (entry_price - mark_price) * size
+                        
+                        # Log the forced closure
+                        state.add_forced_closure_log(symbol, close_reason, {
+                            'side': side,
+                            'size': size,
+                            'entry_price': entry_price,
+                            'mark_price': mark_price,
+                            'take_profit': take_profit,
+                            'stop_loss': stop_loss,
+                            'pnl': round(pnl, 2),
+                            'cancelled_orders': cancelled_orders,
+                            'market_order_id': market_order.get('id')
+                        })
+                        
+                        print(f"✓ Position closed successfully. Estimated PnL: {pnl:.2f} USDT")
+                        
+                        # Update trade history
+                        # The position update will handle closing the trade when we fetch positions again
+                        
+                        # Small delay to avoid rate limits
+                        time.sleep(0.5)
+                    else:
+                        print(f"✗ Failed to close position for {symbol}")
+                        state.add_reconciliation_log("forced_closure_failed", {
+                            'symbol': symbol,
+                            'reason': close_reason,
+                            'message': 'Market order failed to execute'
+                        })
+                
+            except Exception as e:
+                print(f"Error monitoring position for {symbol}: {e}")
+                state.add_reconciliation_log("monitor_error", {
+                    'symbol': symbol,
+                    'error': str(e),
+                    'message': 'Error during position monitoring'
+                })
+                # Continue monitoring other positions
+                continue
+        
+    except Exception as e:
+        print(f"Error in monitor_and_close_positions: {e}")
+        state.add_reconciliation_log("monitor_error", {
+            'error': str(e),
+            'message': 'Top-level error in position monitoring'
+        })
+
 def run_bot_logic():
     print("Starting LuxAlgo Order Block Bot Logic...")
     
@@ -674,6 +820,9 @@ def run_bot_logic():
             
             # Enrich positions with TP/SL derived from exchange orders
             state.enrich_positions_with_tp_sl()
+            
+            # Monitor and force-close positions if TP/SL breached
+            monitor_and_close_positions(client)
             
             for symbol in symbols:
                 # print(f"\n--- Processing {symbol} ---")

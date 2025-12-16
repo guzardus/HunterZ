@@ -388,6 +388,18 @@ def add_reconciliation_log(action: str, details: Dict):
     # Keep only last 50 entries
     bot_state.reconciliation_log = bot_state.reconciliation_log[:50]
 
+def add_forced_closure_log(symbol: str, reason: str, details: Dict):
+    """Log a forced position closure event"""
+    log_entry = {
+        'timestamp': datetime.datetime.now().isoformat(),
+        'action': 'forced_closure',
+        'symbol': symbol,
+        'reason': reason,
+        'details': details
+    }
+    bot_state.reconciliation_log.insert(0, log_entry)
+    bot_state.reconciliation_log = bot_state.reconciliation_log[:50]
+
 def save_metrics():
     """Save metrics to disk"""
     try:

@@ -21,6 +21,9 @@ RISK_PER_TRADE = 1.0  # 1% of balance
 TP_SL_QUANTITY_TOLERANCE = 0.01  # 1% tolerance for quantity matching
 POSITION_RECONCILIATION_INTERVAL = 600  # 10 minutes in seconds
 
+# Active Position Monitoring
+ENABLE_ACTIVE_TP_SL_MONITORING = True  # Set to False to rely only on Binance conditional orders
+
 # Symbol filtering
 TRADING_PAIRS = [
     'BTC/USDT',

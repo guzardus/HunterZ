@@ -223,3 +223,25 @@ class BinanceClient:
         except Exception as e:
             print(f"Error cancelling order {order_id} for {symbol}: {e}")
             return False
+    
+    def close_position_market(self, symbol, side, amount, reason="manual"):
+        """Close a position immediately with a market order.
+        
+        Args:
+            symbol: Trading symbol
+            side: 'buy' or 'sell' (opposite of position direction)
+            amount: Position size to close
+            reason: Reason for closure ("tp_breach", "sl_breach", "manual")
+        
+        Returns:
+            order: Market order result or None
+        """
+        try:
+            # Create a MARKET order with reduceOnly=True
+            params = {'reduceOnly': True}
+            order = self.exchange.create_order(symbol, 'market', side, amount, params=params)
+            print(f"⚠️ FORCED CLOSURE ({reason}): Closed {amount} {symbol} position with market {side} order")
+            return order
+        except Exception as e:
+            print(f"Error closing position for {symbol} with market order: {e}")
+            return None
