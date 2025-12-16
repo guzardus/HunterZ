@@ -6,6 +6,7 @@ import os
 
 # Configuration constants
 MAX_BALANCE_HISTORY_POINTS = 500  # About 40 hours at 5-minute intervals
+MAX_RECONCILIATION_LOG_ENTRIES = 50  # Maximum entries in reconciliation log
 
 @dataclass
 class Metrics:
@@ -385,8 +386,8 @@ def add_reconciliation_log(action: str, details: Dict):
         'details': details
     }
     bot_state.reconciliation_log.insert(0, log_entry)
-    # Keep only last 50 entries
-    bot_state.reconciliation_log = bot_state.reconciliation_log[:50]
+    # Keep only last MAX_RECONCILIATION_LOG_ENTRIES entries
+    bot_state.reconciliation_log = bot_state.reconciliation_log[:MAX_RECONCILIATION_LOG_ENTRIES]
 
 def add_forced_closure_log(symbol: str, reason: str, details: Dict):
     """Log a forced position closure event"""
@@ -398,7 +399,7 @@ def add_forced_closure_log(symbol: str, reason: str, details: Dict):
         'details': details
     }
     bot_state.reconciliation_log.insert(0, log_entry)
-    bot_state.reconciliation_log = bot_state.reconciliation_log[:50]
+    bot_state.reconciliation_log = bot_state.reconciliation_log[:MAX_RECONCILIATION_LOG_ENTRIES]
 
 def save_metrics():
     """Save metrics to disk"""

@@ -661,7 +661,7 @@ def monitor_and_close_positions(client):
                         # The position update will handle closing the trade when we fetch positions again
                         
                         # Small delay to avoid rate limits
-                        time.sleep(0.5)
+                        time.sleep(config.FORCED_CLOSURE_RATE_LIMIT_DELAY)
                     else:
                         print(f"✗ Failed to close position for {symbol}")
                         state.add_reconciliation_log("forced_closure_failed", {
