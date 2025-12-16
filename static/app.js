@@ -10,7 +10,11 @@ const TRADING_PAIRS = [
     'BNB/USDT',
     'ADA/USDT',
     'LTC/USDT',
-    'AVAX/USDT'
+    'AVAX/USDT',
+    'XRP/USDT',
+    'DOGE/USDT',
+    'MATIC/USDT',
+    'SHIB/USDT'
 ];
 
 const charts = {};
