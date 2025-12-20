@@ -259,11 +259,11 @@ async function updateStatus() {
             unrealizedPnlElement.className = totalUnrealizedPnL >= 0 ? 'stat-val value text-green' : 'stat-val value text-red';
         }
         
-        // Total balance from exchange already includes unrealized P&L; avoid double counting
-        const totalBalance = equityBalance;
+        // Total balance = wallet balance + unrealized P&L
+        const totalBalance = walletBalance + totalUnrealizedPnL;
         const totalBalanceElement = document.getElementById('total-balance');
         if (totalBalanceElement) {
-            totalBalanceElement.textContent = `${totalBalance.toFixed(2)}`;
+            totalBalanceElement.textContent = `${totalBalance.toFixed(2)} USDT`;
             totalBalanceElement.className = totalBalance >= walletBalance ? 'value' : 'value text-red';
         }
         
