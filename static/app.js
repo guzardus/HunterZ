@@ -243,9 +243,14 @@ async function updateStatus() {
         }
         
         // Update header values
+        const equityBalance = typeof data.balance === 'number' ? data.balance : 0;
+        const walletBalance = typeof data.free_balance === 'number' 
+            ? data.free_balance 
+            : Math.max(0, equityBalance - totalUnrealizedPnL);
+
         const balanceElement = document.getElementById('balance');
         if (balanceElement) {
-            balanceElement.textContent = `${data.balance.toFixed(2)} USDT`;
+            balanceElement.textContent = `${walletBalance.toFixed(2)} USDT`;
         }
         
         const unrealizedPnlElement = document.getElementById('unrealized-pnl');
@@ -254,12 +259,12 @@ async function updateStatus() {
             unrealizedPnlElement.className = totalUnrealizedPnL >= 0 ? 'stat-val value text-green' : 'stat-val value text-red';
         }
         
-        // Calculate total balance (wallet + unrealized P&L)
-        const totalBalance = data.balance + totalUnrealizedPnL;
+        // Total balance from exchange already includes unrealized P&L; avoid double counting
+        const totalBalance = equityBalance;
         const totalBalanceElement = document.getElementById('total-balance');
         if (totalBalanceElement) {
             totalBalanceElement.textContent = `${totalBalance.toFixed(2)}`;
-            totalBalanceElement.className = totalBalance >= data.balance ? 'value' : 'value text-red';
+            totalBalanceElement.className = totalBalance >= walletBalance ? 'value' : 'value text-red';
         }
         
         // Update additional info
