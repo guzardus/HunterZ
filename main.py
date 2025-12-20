@@ -697,7 +697,8 @@ def run_bot_logic():
             for symbol in symbols:
                 # print(f"\n--- Processing {symbol} ---")
                 
-                # Get position from state (already updated above)
+                # Get position from state (updated in all-positions fetch above)
+                # This retrieves the current position data that was fetched and stored
                 position = state.bot_state.positions.get(symbol)
                 
                 # 2. Fetch Data
