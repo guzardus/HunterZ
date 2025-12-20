@@ -31,28 +31,12 @@ class BinanceClient:
             return 0.0
 
     def get_full_balance(self):
-        """Get complete balance information including total, free, and used.
-        
-        For Binance Futures, returns the Wallet Balance (not Margin Balance).
-        The 'total' field represents the wallet balance excluding unrealized P&L,
-        which prevents double-counting when the frontend adds unrealized P&L separately.
-        """
+        """Get complete balance information including total, free, and used."""
         try:
             balance = self.exchange.fetch_balance()
             usdt_balance = balance.get('USDT', {})
-            
-            # For Binance Futures, get wallet balance from info field
-            # This is the actual wallet balance without unrealized P&L
-            wallet_balance = 0.0
-            if 'info' in usdt_balance and 'walletBalance' in usdt_balance['info']:
-                # Binance Futures returns walletBalance in the info field
-                wallet_balance = float(usdt_balance['info']['walletBalance'])
-            else:
-                # Fallback to 'free' if walletBalance is not available
-                wallet_balance = float(usdt_balance.get('free', 0))
-            
             return {
-                'total': wallet_balance,  # Wallet balance without unrealized P&L
+                'total': float(usdt_balance.get('total', 0)),
                 'free': float(usdt_balance.get('free', 0)),
                 'used': float(usdt_balance.get('used', 0))
             }
