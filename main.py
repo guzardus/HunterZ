@@ -672,34 +672,15 @@ def run_bot_logic():
             exchange_orders = client.get_all_open_orders()
             state.update_exchange_open_orders(exchange_orders)
             
-            # Fetch all positions from the exchange (not just TRADING_PAIRS)
-            all_positions = client.get_all_positions()
-            
-            # Track which symbols have active positions
-            active_position_symbols = set()
-            
-            # Update all positions in state
-            for position in all_positions:
-                symbol = position.get('symbol')
-                if symbol:
-                    active_position_symbols.add(symbol)
-                    state.update_position(symbol, position)
-            
-            # Remove positions from state that are no longer active on the exchange
-            for symbol in list(state.bot_state.positions.keys()):
-                if symbol not in active_position_symbols:
-                    # Position was closed, update state to reflect this
-                    state.update_position(symbol, None)
-            
             # Enrich positions with TP/SL derived from exchange orders
             state.enrich_positions_with_tp_sl()
             
             for symbol in symbols:
                 # print(f"\n--- Processing {symbol} ---")
                 
-                # Get position from state (updated in all-positions fetch above)
-                # This retrieves the current position data that was fetched and stored
-                position = state.bot_state.positions.get(symbol)
+                # Check current position
+                position = client.get_position(symbol)
+                state.update_position(symbol, position)
                 
                 # 2. Fetch Data
                 ohlcv = client.fetch_ohlcv(symbol)
@@ -729,17 +710,17 @@ def run_bot_logic():
                     # print("No valid unmitigated order blocks found.")
                     continue
                 
-                # Check if position exists
-                # Position from state uses 'size' for position amount, 'entry_price' for entry price
+                # Check if position exists using ccxt unified format
+                # ccxt uses 'contracts' for position amount, 'entryPrice' for entry price
                 has_position = False
                 if position:
-                    size = position.get('size', 0)
-                    entry_price = position.get('entry_price', 0)
-                    if size is None:
-                        size = 0
+                    contracts = position.get('contracts', position.get('positionAmt', 0))
+                    if contracts is None:
+                        contracts = 0
+                    entry_price = position.get('entryPrice', 0)
                     if entry_price is None:
                         entry_price = 0
-                    has_position = float(size) != 0 and float(entry_price) > 0
+                    has_position = float(contracts) != 0 and float(entry_price) > 0
                 
                 if has_position:
                     # print(f"Position exists for {symbol}. Skipping new entry search.")
