@@ -73,8 +73,14 @@ class BinanceClient:
     def get_all_open_orders(self):
         """Fetch all open orders from the exchange across all trading pairs."""
         try:
-            orders = self.exchange.fetch_open_orders()
-            return orders
+            all_orders = []
+            for symbol in config.TRADING_PAIRS:
+                try:
+                    symbol_orders = self.exchange.fetch_open_orders(symbol)
+                    all_orders.extend(symbol_orders)
+                except Exception as symbol_err:
+                    print(f"Error fetching open orders for {symbol}: {symbol_err}")
+            return all_orders
         except Exception as e:
             print(f"Error fetching all open orders: {e}")
             return []
