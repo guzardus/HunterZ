@@ -246,7 +246,7 @@ async function updateStatus() {
         const equityBalance = typeof data.balance === 'number' ? data.balance : 0;
         const walletBalance = typeof data.free_balance === 'number' 
             ? data.free_balance 
-            : equityBalance - totalUnrealizedPnL;
+            : Math.max(0, equityBalance - totalUnrealizedPnL);
 
         const balanceElement = document.getElementById('balance');
         if (balanceElement) {
