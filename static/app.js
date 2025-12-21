@@ -243,14 +243,16 @@ async function updateStatus() {
         }
         
         // Update header values
-        const equityBalance = typeof data.balance === 'number' ? data.balance : 0;
-        const walletBalance = typeof data.free_balance === 'number' 
-            ? data.free_balance 
+        const parsedBalance = Number(data.balance);
+        const equityBalance = Number.isFinite(parsedBalance) ? parsedBalance : 0;
+        const parsedFreeBalance = Number(data.free_balance);
+        const walletBalance = Number.isFinite(parsedFreeBalance) 
+            ? parsedFreeBalance 
             : Math.max(0, equityBalance - totalUnrealizedPnL);
 
         const balanceElement = document.getElementById('balance');
         if (balanceElement) {
-            balanceElement.textContent = `${walletBalance.toFixed(2)} USDT`;
+            balanceElement.textContent = walletBalance.toFixed(2);
         }
         
         const unrealizedPnlElement = document.getElementById('unrealized-pnl');
@@ -260,10 +262,12 @@ async function updateStatus() {
         }
         
         // Total balance = wallet balance + unrealized P&L
-        const totalBalance = walletBalance + totalUnrealizedPnL;
+        const totalBalance = Number.isFinite(parsedBalance) 
+            ? equityBalance 
+            : walletBalance + totalUnrealizedPnL;
         const totalBalanceElement = document.getElementById('total-balance');
         if (totalBalanceElement) {
-            totalBalanceElement.textContent = `${totalBalance.toFixed(2)} USDT`;
+            totalBalanceElement.textContent = totalBalance.toFixed(2);
             totalBalanceElement.className = totalBalance >= walletBalance ? 'value' : 'value text-red';
         }
         
