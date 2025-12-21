@@ -402,6 +402,9 @@ async function updatePortfolioChart() {
         
         // Update the chart
         portfolioSeries.setData(chartData);
+        if (portfolioChart) {
+            portfolioChart.timeScale().fitContent();
+        }
     } catch (error) {
         console.error('Error updating portfolio chart:', error);
     }
@@ -451,6 +454,37 @@ function calculateDuration(entryTime) {
         }
     } catch (e) {
         return '-';
+    }
+}
+
+function formatTradeDuration(entryTime, exitTime) {
+    if (!entryTime) return '-';
+    
+    const start = new Date(entryTime);
+    if (isNaN(start.getTime())) {
+        return '-';
+    }
+    
+    const end = exitTime ? new Date(exitTime) : new Date();
+    if (isNaN(end.getTime())) {
+        return '-';
+    }
+    
+    const durationMs = end - start;
+    if (durationMs < 0) {
+        return '-';
+    }
+    
+    const days = Math.floor(durationMs / MS_PER_DAY);
+    const hours = Math.floor((durationMs % MS_PER_DAY) / MS_PER_HOUR);
+    const minutes = Math.floor((durationMs % MS_PER_HOUR) / MS_PER_MINUTE);
+    
+    if (days > 0) {
+        return `${days}d ${hours}h`;
+    } else if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    } else {
+        return `${minutes}m`;
     }
 }
 
@@ -610,54 +644,65 @@ async function updateTrades() {
         
         const tbody = document.getElementById('trades-tbody');
         
-        if (data.trades && data.trades.length > 0) {
+        const trades = Array.isArray(data.trades) ? [...data.trades] : [];
+        
+        if (trades.length > 0) {
             // Calculate win rate
-            const closedTrades = data.trades.filter(t => t.status === 'CLOSED' || t.pnl !== undefined);
-            const winningTrades = closedTrades.filter(t => t.pnl > 0);
+            const closedTrades = trades.filter(t => t.status === 'CLOSED' || t.pnl !== undefined);
+            const winningTrades = closedTrades.filter(t => Number(t.pnl) > 0);
             const winRate = closedTrades.length > 0 ? (winningTrades.length / closedTrades.length * 100).toFixed(1) : 0;
             const winRateElement = document.getElementById('win-rate');
             if (winRateElement) {
                 winRateElement.textContent = `${winRate}%`;
                 winRateElement.className = winRate >= 50 ? 'stat-val value text-green' : 'stat-val value text-red';
             }
+
+            trades.sort((a, b) => {
+                const aTime = new Date(a.timestamp || a.entry_time || 0).getTime();
+                const bTime = new Date(b.timestamp || b.entry_time || 0).getTime();
+                return bTime - aTime;
+            });
             
-            tbody.innerHTML = data.trades.slice(0, 20).map(trade => {
-                // Convert to Melbourne time
-                const time = new Date(trade.timestamp).toLocaleString('en-AU', { 
-                    timeZone: 'Australia/Melbourne',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
+            tbody.innerHTML = trades.map(trade => {
+                const timeSource = trade.entry_time || trade.timestamp;
+                const timeDate = timeSource ? new Date(timeSource) : null;
+                const time = (timeDate && !isNaN(timeDate.getTime())) 
+                    ? timeDate.toLocaleString('en-AU', { 
+                        timeZone: 'Australia/Melbourne',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    }) 
+                    : '-';
                 
-                // Calculate P&L percentage
-                let pnlPercent = '-';
-                if (trade.entry_price && trade.pnl && trade.size && trade.size > 0) {
-                    pnlPercent = ((trade.pnl / (trade.entry_price * trade.size)) * 100).toFixed(2);
-                }
+                const entryPrice = Number(trade.entry_price);
+                const exitPrice = Number(trade.exit_price);
+                const size = Number(trade.size);
+                const pnlValue = Number(trade.pnl);
+                const pnlClass = Number.isFinite(pnlValue) ? (pnlValue >= 0 ? 'positive' : 'negative') : '';
                 
-                // Calculate duration
-                let duration = '-';
-                if (trade.entry_time && trade.exit_time) {
-                    const durationMs = new Date(trade.exit_time) - new Date(trade.entry_time);
-                    const hours = Math.floor(durationMs / 3600000);
-                    const minutes = Math.floor((durationMs % 3600000) / 60000);
-                    duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-                }
+                const pnlPercent = (Number.isFinite(pnlValue) && Number.isFinite(entryPrice) && Number.isFinite(size) && entryPrice !== 0 && size > 0)
+                    ? ((pnlValue / (entryPrice * size)) * 100).toFixed(2)
+                    : '-';
+                
+                const duration = formatTradeDuration(
+                    trade.entry_time || trade.timestamp,
+                    trade.exit_time || (trade.status === 'CLOSED' ? trade.timestamp : null)
+                );
                 
                 return `
                     <tr>
                         <td>${time}</td>
                         <td><strong>${trade.symbol || '-'}</strong></td>
                         <td class="${(trade.side === 'BUY' || trade.side === 'LONG') ? 'positive' : 'negative'}">${trade.side || '-'}</td>
-                        <td>$${trade.entry_price ? trade.entry_price.toFixed(2) : '-'}</td>
-                        <td>$${trade.exit_price ? trade.exit_price.toFixed(2) : '-'}</td>
-                        <td>${trade.size ? trade.size.toFixed(4) : '-'}</td>
-                        <td class="${trade.pnl >= 0 ? 'positive' : 'negative'}">
-                            ${trade.pnl ? trade.pnl.toFixed(2) : '-'} USDT
+                        <td>${Number.isFinite(entryPrice) ? `$${entryPrice.toFixed(2)}` : '-'}</td>
+                        <td>${Number.isFinite(exitPrice) ? `$${exitPrice.toFixed(2)}` : '-'}</td>
+                        <td>${Number.isFinite(size) ? size.toFixed(4) : '-'}</td>
+                        <td class="${pnlClass}">
+                            ${Number.isFinite(pnlValue) ? pnlValue.toFixed(2) : '-'}
                         </td>
-                        <td class="${trade.pnl >= 0 ? 'positive' : 'negative'}">
+                        <td class="${pnlClass}">
                             ${pnlPercent !== '-' ? pnlPercent + '%' : '-'}
                         </td>
                         <td>${duration}</td>

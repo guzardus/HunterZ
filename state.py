@@ -60,10 +60,6 @@ def update_full_balance(total: float, free: float, used: float):
         'total_pnl': bot_state.total_pnl
     })
     
-    # Keep only last MAX_BALANCE_HISTORY_POINTS data points
-    if len(bot_state.balance_history) > MAX_BALANCE_HISTORY_POINTS:
-        bot_state.balance_history = bot_state.balance_history[-MAX_BALANCE_HISTORY_POINTS:]
-
 def update_exchange_open_orders(orders: List[Dict]):
     """Update the list of open orders from the exchange.
     
@@ -317,8 +313,6 @@ def add_trade(trade: Dict):
     """Add a trade to history"""
     trade['timestamp'] = datetime.datetime.now().isoformat()
     bot_state.trade_history.insert(0, trade)
-    # Keep only last 100 trades
-    bot_state.trade_history = bot_state.trade_history[:100]
     save_trade_history()
 
 def update_total_pnl(pnl: float):
