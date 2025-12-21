@@ -57,24 +57,8 @@
                     <div class="stat-val value" id="pending-orders-metric" style="margin-top: 15px; font-size: 2rem;">0</div>
                 </div>
                 <div class="glass-card">
-                    <div class="label uppercase">Exchange Orders</div>
-                    <div class="stat-val value" id="exchange-orders-metric" style="margin-top: 15px; font-size: 2rem;">0</div>
-                </div>
-                <div class="glass-card">
                     <div class="label uppercase">Placed</div>
                     <div class="stat-val value" id="placed-orders-metric" style="margin-top: 15px; font-size: 2rem;">0</div>
-                </div>
-                <div class="glass-card">
-                    <div class="label uppercase">Cancelled</div>
-                    <div class="stat-val value" id="cancelled-orders-metric" style="margin-top: 15px; font-size: 2rem;">0</div>
-                </div>
-                <div class="glass-card">
-                    <div class="label uppercase">Filled</div>
-                    <div class="stat-val value" id="filled-orders-metric" style="margin-top: 15px; font-size: 2rem;">0</div>
-                </div>
-                <div class="glass-card">
-                    <div class="label uppercase">Total P&L</div>
-                    <div class="stat-val value" id="total-pnl" style="margin-top: 15px; font-size: 2rem;">0.00</div>
                 </div>
                 <div class="glass-card">
                     <div class="label uppercase">Win Rate</div>
@@ -149,27 +133,29 @@
         <section class="trades-section">
             <div class="feed-title" style="margin-bottom: 1.5rem;">TRADE HISTORY</div>
             <div class="glass-card">
-                <table id="trades-table">
-                    <thead>
-                        <tr>
-                            <th>Time (Melbourne)</th>
-                            <th>Symbol</th>
-                            <th>Side</th>
-                            <th>Entry Price</th>
-                            <th>Exit Price</th>
-                            <th>Size</th>
-                            <th>P&L</th>
-                            <th>P&L %</th>
-                            <th>Duration</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="trades-tbody">
-                        <tr>
-                            <td colspan="10" class="no-data">No trades yet</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="table-scroll">
+                    <table id="trades-table">
+                        <thead>
+                            <tr>
+                                <th>Time (Melbourne)</th>
+                                <th>Symbol</th>
+                                <th>Side</th>
+                                <th>Entry Price</th>
+                                <th>Exit Price</th>
+                                <th>Size</th>
+                                <th>P&L</th>
+                                <th>P&L %</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-tbody">
+                            <tr>
+                                <td colspan="10" class="no-data">No trades yet</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </section>
 
