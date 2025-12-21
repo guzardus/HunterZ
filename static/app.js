@@ -262,7 +262,7 @@ async function updateStatus() {
         }
         
         // Total balance = wallet balance + unrealized P&L
-        const totalBalance = Number.isFinite(parsedBalance) 
+        const totalBalance = Number.isFinite(equityBalance) 
             ? equityBalance 
             : walletBalance + totalUnrealizedPnL;
         const totalBalanceElement = document.getElementById('total-balance');
