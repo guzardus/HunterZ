@@ -135,6 +135,7 @@ The bot implements the LuxAlgo Order Block strategy:
 - `GET /api/market-data/{symbol}` - Market data for specific pair
 - `GET /api/all-market-data` - Market data for all pairs
 - `GET /api/metrics` - Order metrics and reconciliation log
+- `GET /api/portfolio-history` - Portfolio balance history over time (up to 17 days at 5-minute intervals)
 
 ## Safety Features
 
@@ -153,6 +154,11 @@ The bot implements the LuxAlgo Order Block strategy:
   - Detects and fixes TP/SL quantity mismatches
   - Runs at startup and every 10 minutes
   - Derives TP/SL from exchange orders for accurate display
+- **Portfolio Performance Tracking**:
+  - Tracks balance history at 5-minute intervals
+  - Stores up to 17 days of historical data (5000 data points)
+  - Persists history to disk for long-term tracking from account creation
+  - Displays portfolio performance chart on the dashboard
 
 ## Development
 
