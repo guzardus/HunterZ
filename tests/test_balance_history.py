@@ -77,29 +77,35 @@ def test_balance_history_trimming():
     original_max = state.MAX_BALANCE_HISTORY_POINTS
     
     try:
+        # Test configuration
+        TEST_MAX_ENTRIES = 10
+        ENTRIES_TO_ADD = 15
+        
         # Override the file path and max points for testing
         state.BALANCE_HISTORY_FILE = os.path.join(temp_dir, 'balance_history.json')
-        state.MAX_BALANCE_HISTORY_POINTS = 10
+        state.MAX_BALANCE_HISTORY_POINTS = TEST_MAX_ENTRIES
         
         # Initialize state
         state.bot_state.balance_history = []
         state.bot_state.total_pnl = 0.0
         
         # Add more entries than the limit
-        for i in range(15):
+        for i in range(ENTRIES_TO_ADD):
             state.update_full_balance(1000.0 + i, 800.0, 200.0)
         
         # Verify entries were trimmed to the limit
-        assert len(state.bot_state.balance_history) == 10, \
-            f"Expected 10 entries (trimmed), got {len(state.bot_state.balance_history)}"
+        assert len(state.bot_state.balance_history) == TEST_MAX_ENTRIES, \
+            f"Expected {TEST_MAX_ENTRIES} entries (trimmed), got {len(state.bot_state.balance_history)}"
         
         # Verify the oldest entries were removed (should start at 1005.0)
-        assert state.bot_state.balance_history[0]['total_balance'] == 1005.0, \
-            f"Expected first entry total_balance=1005.0, got {state.bot_state.balance_history[0]['total_balance']}"
+        expected_first = 1000.0 + (ENTRIES_TO_ADD - TEST_MAX_ENTRIES)
+        assert state.bot_state.balance_history[0]['total_balance'] == expected_first, \
+            f"Expected first entry total_balance={expected_first}, got {state.bot_state.balance_history[0]['total_balance']}"
         
         # Verify the newest entries were kept (should end at 1014.0)
-        assert state.bot_state.balance_history[-1]['total_balance'] == 1014.0, \
-            f"Expected last entry total_balance=1014.0, got {state.bot_state.balance_history[-1]['total_balance']}"
+        expected_last = 1000.0 + (ENTRIES_TO_ADD - 1)
+        assert state.bot_state.balance_history[-1]['total_balance'] == expected_last, \
+            f"Expected last entry total_balance={expected_last}, got {state.bot_state.balance_history[-1]['total_balance']}"
         
         print("✓ Balance history trimming test passed")
         

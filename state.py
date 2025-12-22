@@ -478,7 +478,11 @@ def load_trade_history_on_startup():
 def save_balance_history():
     """Save balance history to disk"""
     try:
-        os.makedirs(os.path.dirname(BALANCE_HISTORY_FILE), exist_ok=True)
+        # Create directory only if it doesn't exist
+        data_dir = os.path.dirname(BALANCE_HISTORY_FILE)
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir, exist_ok=True)
+        
         with open(BALANCE_HISTORY_FILE, 'w') as f:
             json.dump(bot_state.balance_history, f, indent=2)
     except Exception as e:
