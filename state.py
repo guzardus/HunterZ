@@ -273,7 +273,7 @@ def _close_trade_in_history(symbol: str, old_position: Dict):
     """Find and update the open trade for this symbol with exit information.
     
     Args:
-        symbol: The trading symbol (e.g., 'BTC/USDT')
+        symbol: The trading symbol (e.g., 'BTC/USDC')
         old_position: The position data before it was closed
         
     Note:
@@ -313,7 +313,7 @@ def _close_trade_in_history(symbol: str, old_position: Dict):
             # Save trade history after closing a trade
             save_trade_history()
             
-            print(f"Trade closed for {symbol}: PnL = {pnl:.2f} USDT")
+            print(f"Trade closed for {symbol}: PnL = {pnl:.2f} USDC")
             break
 
 def add_trade(trade: Dict):

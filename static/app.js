@@ -2,19 +2,19 @@
 // Ethereum.org inspired design with comprehensive dashboard
 
 const TRADING_PAIRS = [
-    'BTC/USDT',
-    'ETH/USDT',
-    'SOL/USDT',
-    'UNI/USDT',
-    'DOT/USDT',
-    'BNB/USDT',
-    'ADA/USDT',
-    'LTC/USDT',
-    'AVAX/USDT',
-    'XRP/USDT',
-    'DOGE/USDT',
-    'MATIC/USDT',
-    'SHIB/USDT'
+    'BTC/USDC',
+    'ETH/USDC',
+    'SOL/USDC',
+    'UNI/USDC',
+    'DOT/USDC',
+    'BNB/USDC',
+    'ADA/USDC',
+    'LTC/USDC',
+    'AVAX/USDC',
+    'XRP/USDC',
+    'DOGE/USDC',
+    'MATIC/USDC',
+    'SHIB/USDC'
 ];
 
 const charts = {};
@@ -507,7 +507,7 @@ async function updatePositions() {
                     <td>$${pos.entry_price.toFixed(2)}</td>
                     <td>$${pos.mark_price.toFixed(2)}</td>
                     <td class="${pos.unrealized_pnl >= 0 ? 'positive' : 'negative'}">
-                        ${pos.unrealized_pnl.toFixed(2)} USDT
+                        ${pos.unrealized_pnl.toFixed(2)} USDC
                     </td>
                     <td>${pos.leverage}x</td>
                     <td>${duration}</td>
@@ -828,7 +828,7 @@ async function updateMarketData() {
                     const pnlClass = data.position.unrealized_pnl >= 0 ? 'bullish' : 'bearish';
                     const side = data.position.side === 'LONG' ? '📈' : '📉';
                     infoHTML += `<div class="ob-info ${pnlClass}">
-                        ${side} ${data.position.side}: ${data.position.unrealized_pnl.toFixed(2)} USDT
+                        ${side} ${data.position.side}: ${data.position.unrealized_pnl.toFixed(2)} USDC
                     </div>`;
                     
                     // Show TP and SL if available

@@ -6,7 +6,7 @@ def calculate_trade_params(ob, balance, current_price=None):
     
     Args:
         ob (dict): The Order Block dictionary.
-        balance (float): Account balance in USDT.
+        balance (float): Account balance in USDC.
         current_price (float, optional): Current price (for verification or nearest check).
         
     Returns:

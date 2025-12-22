@@ -5,7 +5,7 @@ import utils
 import lux_algo
 import risk_manager
 import state
-from execution import BinanceClient
+from execution import HyperliquidClient
 import threading
 
 def prepare_dataframe(ohlcv):
@@ -36,7 +36,7 @@ def update_exchange_orders_count(client):
     displays accurate "Exchange Orders" count.
     
     Args:
-        client: BinanceClient instance for fetching orders
+        client: HyperliquidClient instance for fetching orders
         
     Returns:
         None
@@ -240,7 +240,7 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
     3. Places missing TP/SL orders or replaces mismatched ones
     
     Args:
-        client: BinanceClient instance
+        client: HyperliquidClient instance
         symbol: Trading symbol
         position: Position dict from exchange
         pending_order: Optional pending order data with TP/SL params
@@ -423,7 +423,7 @@ def reconcile_existing_positions_with_trades(client):
     creates those entries so the positions are properly tracked.
     
     Args:
-        client: BinanceClient instance
+        client: HyperliquidClient instance
     """
     print("\n=== Reconciling Existing Positions with Trade History ===")
     
@@ -494,7 +494,7 @@ def reconcile_all_positions_tp_sl(client):
     all positions have proper TP/SL orders.
     
     Args:
-        client: BinanceClient instance
+        client: HyperliquidClient instance
     """
     print("\n=== Starting Position TP/SL Reconciliation ===")
     state.add_reconciliation_log("position_reconciliation_start", {
@@ -550,7 +550,7 @@ def monitor_and_close_positions(client):
     - Price breaches TP/SL levels but orders don't trigger
     
     Args:
-        client: BinanceClient instance
+        client: HyperliquidClient instance
     """
     if not config.ENABLE_ACTIVE_TP_SL_MONITORING:
         return
@@ -655,7 +655,7 @@ def monitor_and_close_positions(client):
                             'market_order_id': market_order.get('id')
                         })
                         
-                        print(f"✓ Position closed successfully. Estimated PnL: {pnl:.2f} USDT")
+                        print(f"✓ Position closed successfully. Estimated PnL: {pnl:.2f} USDC")
                         
                         # Update trade history
                         # The position update will handle closing the trade when we fetch positions again
@@ -693,7 +693,7 @@ def run_bot_logic():
     # Initialize state and load persisted data
     state.init()
     
-    client = BinanceClient()
+    client = HyperliquidClient()
     
     # Reconcile live orders before starting main loop
     reconcile_live_orders(client)
@@ -812,7 +812,7 @@ def run_bot_logic():
             # Fetch full balance info
             full_balance = client.get_full_balance()
             state.update_full_balance(full_balance['total'], full_balance['free'], full_balance['used'])
-            # print(f"Current Balance: {full_balance['total']:.2f} USDT (Free: {full_balance['free']:.2f})")
+            # print(f"Current Balance: {full_balance['total']:.2f} USDC (Free: {full_balance['free']:.2f})")
             
             # Fetch all open orders from exchange and update state
             exchange_orders = client.get_all_open_orders()

@@ -68,7 +68,7 @@ class TestMetricsPersistence(unittest.TestCase):
         """Test that trade history can be saved and loaded."""
         # Add some trades
         trade1 = {
-            'symbol': 'BTC/USDT',
+            'symbol': 'BTC/USDC',
             'side': 'LONG',
             'entry_price': 45000,
             'exit_price': 46000,
@@ -78,7 +78,7 @@ class TestMetricsPersistence(unittest.TestCase):
             'timestamp': '2024-01-01T00:00:00'
         }
         trade2 = {
-            'symbol': 'ETH/USDT',
+            'symbol': 'ETH/USDC',
             'side': 'SHORT',
             'entry_price': 3000,
             'exit_price': 2900,
@@ -109,10 +109,10 @@ class TestMetricsPersistence(unittest.TestCase):
         """Test that total P&L is correctly calculated from trade history."""
         # Add trades with different P&L
         trades = [
-            {'symbol': 'BTC/USDT', 'pnl': 100, 'status': 'CLOSED'},
-            {'symbol': 'ETH/USDT', 'pnl': -50, 'status': 'CLOSED'},
-            {'symbol': 'SOL/USDT', 'pnl': 75, 'status': 'CLOSED'},
-            {'symbol': 'UNI/USDT', 'pnl': None, 'status': 'OPEN'},  # Should be ignored
+            {'symbol': 'BTC/USDC', 'pnl': 100, 'status': 'CLOSED'},
+            {'symbol': 'ETH/USDC', 'pnl': -50, 'status': 'CLOSED'},
+            {'symbol': 'SOL/USDC', 'pnl': 75, 'status': 'CLOSED'},
+            {'symbol': 'UNI/USDC', 'pnl': None, 'status': 'OPEN'},  # Should be ignored
         ]
         
         for trade in trades:

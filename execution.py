@@ -1,18 +1,13 @@
 import ccxt
 import config
 
-class BinanceClient:
+class HyperliquidClient:
     def __init__(self):
-        self.exchange = ccxt.binance({
-            'apiKey': config.API_KEY,
-            'secret': config.API_SECRET,
-            'options': {
-                'defaultType': 'future'
-            }
+        self.exchange = ccxt.hyperliquid({
+            'walletAddress': config.WALLET_ADDRESS,
+            'privateKey': config.PRIVATE_KEY,
         })
-        if config.BINANCE_TESTNET:
-            self.exchange.set_sandbox_mode(True)
-            print("Binance Testnet Enabled")
+        print("Hyperliquid Live Trading Enabled")
 
     def fetch_ohlcv(self, symbol, timeframe=config.TIMEFRAME, limit=100):
         try:
@@ -25,7 +20,7 @@ class BinanceClient:
     def get_balance(self):
         try:
             balance = self.exchange.fetch_balance()
-            return balance['USDT']['free']
+            return balance['USDC']['free']
         except Exception as e:
             print(f"Error fetching balance: {e}")
             return 0.0
@@ -34,11 +29,11 @@ class BinanceClient:
         """Get complete balance information including total, free, and used."""
         try:
             balance = self.exchange.fetch_balance()
-            usdt_balance = balance.get('USDT', {})
+            usdc_balance = balance.get('USDC', {})
             return {
-                'total': float(usdt_balance.get('total', 0)),
-                'free': float(usdt_balance.get('free', 0)),
-                'used': float(usdt_balance.get('used', 0))
+                'total': float(usdc_balance.get('total', 0)),
+                'free': float(usdc_balance.get('free', 0)),
+                'used': float(usdc_balance.get('used', 0))
             }
         except Exception as e:
             print(f"Error fetching full balance: {e}")

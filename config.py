@@ -4,13 +4,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# API Credentials
-API_KEY = os.getenv("BINANCE_API_KEY")
-API_SECRET = os.getenv("BINANCE_API_SECRET")
-
-# Network Settings
-# Default to True for safety, can be overridden by env var
-BINANCE_TESTNET = os.getenv("BINANCE_TESTNET", "True").lower() in ("true", "1", "t")
+# API Credentials for Hyperliquid
+WALLET_ADDRESS = os.getenv("HYPERLIQUID_WALLET_ADDRESS")
+PRIVATE_KEY = os.getenv("HYPERLIQUID_PRIVATE_KEY")
 
 # Trading Settings
 TIMEFRAME = '30m'
@@ -22,22 +18,22 @@ TP_SL_QUANTITY_TOLERANCE = 0.01  # 1% tolerance for quantity matching
 POSITION_RECONCILIATION_INTERVAL = 600  # 10 minutes in seconds
 
 # Active Position Monitoring
-ENABLE_ACTIVE_TP_SL_MONITORING = True  # Set to False to rely only on Binance conditional orders
+ENABLE_ACTIVE_TP_SL_MONITORING = True  # Set to False to rely only on Hyperliquid conditional orders
 FORCED_CLOSURE_RATE_LIMIT_DELAY = 0.5  # Delay in seconds between forced closures to avoid rate limits
 
-# Symbol filtering
+# Symbol filtering - Using USDC pairs for Hyperliquid
 TRADING_PAIRS = [
-    'BTC/USDT',
-    'ETH/USDT',
-    'SOL/USDT',
-    'UNI/USDT',
-    'DOT/USDT',
-    'BNB/USDT',
-    'ADA/USDT',
-    'LTC/USDT',
-    'AVAX/USDT',
-    'XRP/USDT',
-    'DOGE/USDT',
-    'MATIC/USDT',
-    'SHIB/USDT'
+    'BTC/USDC',
+    'ETH/USDC',
+    'SOL/USDC',
+    'UNI/USDC',
+    'DOT/USDC',
+    'BNB/USDC',
+    'ADA/USDC',
+    'LTC/USDC',
+    'AVAX/USDC',
+    'XRP/USDC',
+    'DOGE/USDC',
+    'MATIC/USDC',
+    'SHIB/USDC'
 ]

@@ -36,8 +36,8 @@ class TestActiveMonitoring(unittest.TestCase):
         """Test that monitoring is skipped when disabled"""
         with patch.object(config, 'ENABLE_ACTIVE_TP_SL_MONITORING', False):
             state.bot_state.positions = {
-                'BTC/USDT': {
-                    'symbol': 'BTC/USDT',
+                'BTC/USDC': {
+                    'symbol': 'BTC/USDC',
                     'side': 'LONG',
                     'size': 0.01,
                     'entry_price': 40000.0,
@@ -55,8 +55,8 @@ class TestActiveMonitoring(unittest.TestCase):
     def test_long_position_tp_breach(self):
         """Test closing LONG position when TP is breached"""
         state.bot_state.positions = {
-            'BTC/USDT': {
-                'symbol': 'BTC/USDT',
+            'BTC/USDC': {
+                'symbol': 'BTC/USDC',
                 'side': 'LONG',
                 'size': 0.01,
                 'entry_price': 40000.0,
@@ -70,7 +70,7 @@ class TestActiveMonitoring(unittest.TestCase):
         
         # Should close with sell order
         self.mock_client.close_position_market.assert_called_once_with(
-            'BTC/USDT', 'sell', 0.01, 'tp_breach'
+            'BTC/USDC', 'sell', 0.01, 'tp_breach'
         )
         
         # Should log the forced closure
@@ -82,8 +82,8 @@ class TestActiveMonitoring(unittest.TestCase):
     def test_long_position_sl_breach(self):
         """Test closing LONG position when SL is breached"""
         state.bot_state.positions = {
-            'ETH/USDT': {
-                'symbol': 'ETH/USDT',
+            'ETH/USDC': {
+                'symbol': 'ETH/USDC',
                 'side': 'LONG',
                 'size': 1.0,
                 'entry_price': 3000.0,
@@ -97,7 +97,7 @@ class TestActiveMonitoring(unittest.TestCase):
         
         # Should close with sell order
         self.mock_client.close_position_market.assert_called_once_with(
-            'ETH/USDT', 'sell', 1.0, 'sl_breach'
+            'ETH/USDC', 'sell', 1.0, 'sl_breach'
         )
         
         # Should log the forced closure
@@ -107,8 +107,8 @@ class TestActiveMonitoring(unittest.TestCase):
     def test_short_position_tp_breach(self):
         """Test closing SHORT position when TP is breached"""
         state.bot_state.positions = {
-            'SOL/USDT': {
-                'symbol': 'SOL/USDT',
+            'SOL/USDC': {
+                'symbol': 'SOL/USDC',
                 'side': 'SHORT',
                 'size': 10.0,
                 'entry_price': 100.0,
@@ -122,14 +122,14 @@ class TestActiveMonitoring(unittest.TestCase):
         
         # Should close with buy order (opposite of SHORT)
         self.mock_client.close_position_market.assert_called_once_with(
-            'SOL/USDT', 'buy', 10.0, 'tp_breach'
+            'SOL/USDC', 'buy', 10.0, 'tp_breach'
         )
     
     def test_short_position_sl_breach(self):
         """Test closing SHORT position when SL is breached"""
         state.bot_state.positions = {
-            'BNB/USDT': {
-                'symbol': 'BNB/USDT',
+            'BNB/USDC': {
+                'symbol': 'BNB/USDC',
                 'side': 'SHORT',
                 'size': 5.0,
                 'entry_price': 300.0,
@@ -143,14 +143,14 @@ class TestActiveMonitoring(unittest.TestCase):
         
         # Should close with buy order
         self.mock_client.close_position_market.assert_called_once_with(
-            'BNB/USDT', 'buy', 5.0, 'sl_breach'
+            'BNB/USDC', 'buy', 5.0, 'sl_breach'
         )
     
     def test_no_breach(self):
         """Test that position is NOT closed when no breach occurs"""
         state.bot_state.positions = {
-            'BTC/USDT': {
-                'symbol': 'BTC/USDT',
+            'BTC/USDC': {
+                'symbol': 'BTC/USDC',
                 'side': 'LONG',
                 'size': 0.01,
                 'entry_price': 40000.0,
@@ -168,8 +168,8 @@ class TestActiveMonitoring(unittest.TestCase):
     def test_position_without_tp_sl(self):
         """Test that position without TP/SL is skipped"""
         state.bot_state.positions = {
-            'ADA/USDT': {
-                'symbol': 'ADA/USDT',
+            'ADA/USDC': {
+                'symbol': 'ADA/USDC',
                 'side': 'LONG',
                 'size': 100.0,
                 'entry_price': 0.5,
@@ -187,8 +187,8 @@ class TestActiveMonitoring(unittest.TestCase):
     def test_cancel_existing_orders_before_close(self):
         """Test that existing TP/SL orders are cancelled before closing"""
         state.bot_state.positions = {
-            'BTC/USDT': {
-                'symbol': 'BTC/USDT',
+            'BTC/USDC': {
+                'symbol': 'BTC/USDC',
                 'side': 'LONG',
                 'size': 0.01,
                 'entry_price': 40000.0,
@@ -208,8 +208,8 @@ class TestActiveMonitoring(unittest.TestCase):
         
         # Should cancel both orders
         self.assertEqual(self.mock_client.cancel_order.call_count, 2)
-        self.mock_client.cancel_order.assert_any_call('BTC/USDT', 'sl_123')
-        self.mock_client.cancel_order.assert_any_call('BTC/USDT', 'tp_456')
+        self.mock_client.cancel_order.assert_any_call('BTC/USDC', 'sl_123')
+        self.mock_client.cancel_order.assert_any_call('BTC/USDC', 'tp_456')
         
         # Should still close position
         self.mock_client.close_position_market.assert_called_once()
@@ -217,8 +217,8 @@ class TestActiveMonitoring(unittest.TestCase):
     def test_pnl_calculation_long(self):
         """Test PnL calculation for LONG position"""
         state.bot_state.positions = {
-            'BTC/USDT': {
-                'symbol': 'BTC/USDT',
+            'BTC/USDC': {
+                'symbol': 'BTC/USDC',
                 'side': 'LONG',
                 'size': 0.1,
                 'entry_price': 40000.0,
@@ -232,14 +232,14 @@ class TestActiveMonitoring(unittest.TestCase):
         
         # Check logged PnL
         log_entry = state.bot_state.reconciliation_log[0]
-        expected_pnl = (41000.0 - 40000.0) * 0.1  # 100 USDT
+        expected_pnl = (41000.0 - 40000.0) * 0.1  # 100 USDC
         self.assertEqual(log_entry['details']['pnl'], expected_pnl)
     
     def test_pnl_calculation_short(self):
         """Test PnL calculation for SHORT position"""
         state.bot_state.positions = {
-            'SOL/USDT': {
-                'symbol': 'SOL/USDT',
+            'SOL/USDC': {
+                'symbol': 'SOL/USDC',
                 'side': 'SHORT',
                 'size': 10.0,
                 'entry_price': 100.0,
@@ -253,14 +253,14 @@ class TestActiveMonitoring(unittest.TestCase):
         
         # Check logged PnL
         log_entry = state.bot_state.reconciliation_log[0]
-        expected_pnl = (100.0 - 99.0) * 10.0  # 10 USDT
+        expected_pnl = (100.0 - 99.0) * 10.0  # 10 USDC
         self.assertEqual(log_entry['details']['pnl'], expected_pnl)
     
     def test_multiple_positions(self):
         """Test monitoring multiple positions"""
         state.bot_state.positions = {
-            'BTC/USDT': {
-                'symbol': 'BTC/USDT',
+            'BTC/USDC': {
+                'symbol': 'BTC/USDC',
                 'side': 'LONG',
                 'size': 0.01,
                 'entry_price': 40000.0,
@@ -268,8 +268,8 @@ class TestActiveMonitoring(unittest.TestCase):
                 'take_profit': 41000.0,
                 'stop_loss': 39000.0
             },
-            'ETH/USDT': {
-                'symbol': 'ETH/USDT',
+            'ETH/USDC': {
+                'symbol': 'ETH/USDC',
                 'side': 'LONG',
                 'size': 1.0,
                 'entry_price': 3000.0,
@@ -277,8 +277,8 @@ class TestActiveMonitoring(unittest.TestCase):
                 'take_profit': 3100.0,
                 'stop_loss': 2980.0
             },
-            'SOL/USDT': {
-                'symbol': 'SOL/USDT',
+            'SOL/USDC': {
+                'symbol': 'SOL/USDC',
                 'side': 'SHORT',
                 'size': 10.0,
                 'entry_price': 100.0,
@@ -296,14 +296,14 @@ class TestActiveMonitoring(unittest.TestCase):
         # Verify correct closures
         calls = self.mock_client.close_position_market.call_args_list
         call_symbols = [call[0][0] for call in calls]
-        self.assertIn('BTC/USDT', call_symbols)
-        self.assertIn('SOL/USDT', call_symbols)
+        self.assertIn('BTC/USDC', call_symbols)
+        self.assertIn('SOL/USDC', call_symbols)
     
     def test_error_handling_continues_monitoring(self):
         """Test that error in one position doesn't stop monitoring others"""
         state.bot_state.positions = {
-            'BTC/USDT': {
-                'symbol': 'BTC/USDT',
+            'BTC/USDC': {
+                'symbol': 'BTC/USDC',
                 'side': 'LONG',
                 'size': 0.01,
                 'entry_price': 40000.0,
@@ -311,8 +311,8 @@ class TestActiveMonitoring(unittest.TestCase):
                 'take_profit': 41000.0,
                 'stop_loss': 39000.0
             },
-            'ETH/USDT': {
-                'symbol': 'ETH/USDT',
+            'ETH/USDC': {
+                'symbol': 'ETH/USDC',
                 'side': 'LONG',
                 'size': 1.0,
                 'entry_price': 3000.0,
@@ -336,8 +336,8 @@ class TestActiveMonitoring(unittest.TestCase):
     def test_forced_closure_log_structure(self):
         """Test that forced closure log has correct structure"""
         state.bot_state.positions = {
-            'BTC/USDT': {
-                'symbol': 'BTC/USDT',
+            'BTC/USDC': {
+                'symbol': 'BTC/USDC',
                 'side': 'LONG',
                 'size': 0.01,
                 'entry_price': 40000.0,
@@ -353,7 +353,7 @@ class TestActiveMonitoring(unittest.TestCase):
         log_entry = state.bot_state.reconciliation_log[0]
         self.assertIn('timestamp', log_entry)
         self.assertEqual(log_entry['action'], 'forced_closure')
-        self.assertEqual(log_entry['symbol'], 'BTC/USDT')
+        self.assertEqual(log_entry['symbol'], 'BTC/USDC')
         self.assertEqual(log_entry['reason'], 'tp_breach')
         self.assertIn('details', log_entry)
         
@@ -369,21 +369,21 @@ class TestActiveMonitoring(unittest.TestCase):
 
 
 class TestClosePositionMarket(unittest.TestCase):
-    """Test close_position_market method in BinanceClient"""
+    """Test close_position_market method in HyperliquidClient"""
     
     def test_close_position_market_creates_reduce_only_order(self):
         """Test that close_position_market creates a reduceOnly market order"""
-        from execution import BinanceClient
+        from execution import HyperliquidClient
         
-        client = BinanceClient()
+        client = HyperliquidClient()
         client.exchange = Mock()
         client.exchange.create_order = Mock(return_value={'id': '12345', 'status': 'closed'})
         
-        result = client.close_position_market('BTC/USDT', 'sell', 0.01, 'tp_breach')
+        result = client.close_position_market('BTC/USDC', 'sell', 0.01, 'tp_breach')
         
         # Should call create_order with correct parameters
         client.exchange.create_order.assert_called_once_with(
-            'BTC/USDT', 'market', 'sell', 0.01, params={'reduceOnly': True}
+            'BTC/USDC', 'market', 'sell', 0.01, params={'reduceOnly': True}
         )
         
         self.assertIsNotNone(result)
@@ -391,13 +391,13 @@ class TestClosePositionMarket(unittest.TestCase):
     
     def test_close_position_market_handles_error(self):
         """Test that close_position_market handles errors gracefully"""
-        from execution import BinanceClient
+        from execution import HyperliquidClient
         
-        client = BinanceClient()
+        client = HyperliquidClient()
         client.exchange = Mock()
         client.exchange.create_order = Mock(side_effect=Exception("API error"))
         
-        result = client.close_position_market('ETH/USDT', 'buy', 1.0, 'sl_breach')
+        result = client.close_position_market('ETH/USDC', 'buy', 1.0, 'sl_breach')
         
         # Should return None on error
         self.assertIsNone(result)
@@ -420,13 +420,13 @@ class TestAddForcedClosureLog(unittest.TestCase):
             'pnl': 10.0
         }
         
-        state.add_forced_closure_log('BTC/USDT', 'tp_breach', details)
+        state.add_forced_closure_log('BTC/USDC', 'tp_breach', details)
         
         self.assertEqual(len(state.bot_state.reconciliation_log), 1)
         
         log_entry = state.bot_state.reconciliation_log[0]
         self.assertEqual(log_entry['action'], 'forced_closure')
-        self.assertEqual(log_entry['symbol'], 'BTC/USDT')
+        self.assertEqual(log_entry['symbol'], 'BTC/USDC')
         self.assertEqual(log_entry['reason'], 'tp_breach')
         self.assertEqual(log_entry['details'], details)
         self.assertIn('timestamp', log_entry)

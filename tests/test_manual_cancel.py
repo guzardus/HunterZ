@@ -30,7 +30,7 @@ class TestManualOrderCancellation(unittest.TestCase):
         # 2. User manually cancels the order on exchange
         # 3. Bot should detect order is cancelled and allow new placement
         
-        symbol = 'BTC/USDT'
+        symbol = 'BTC/USDC'
         
         # Add a pending order to state (simulating bot placed an order)
         state.add_pending_order(symbol, 'order_123', {
@@ -48,7 +48,7 @@ class TestManualOrderCancellation(unittest.TestCase):
     
     def test_remove_pending_order_allows_new_placement(self):
         """Test that removing a pending order allows new placement"""
-        symbol = 'ETH/USDT'
+        symbol = 'ETH/USDC'
         
         # Add pending order
         state.add_pending_order(symbol, 'order_456', {

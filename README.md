@@ -1,17 +1,24 @@
 # HunterZ - Order Block Trading System
 
-A sophisticated cryptocurrency trading bot based on the LuxAlgo Order Block detection strategy, featuring a TRON-themed frontend dashboard with real-time charts.
+A sophisticated cryptocurrency trading bot based on the LuxAlgo Order Block detection strategy, featuring a TRON-themed frontend dashboard with real-time charts. Configured for Hyperliquid live trading.
 
 ## Features
 
 - **30-Minute Order Block Strategy**: Implements the proven LuxAlgo Order Block detection algorithm
-- **Multi-Pair Trading**: Trades 6 major cryptocurrency pairs:
-  - BTC/USDT
-  - ETH/USDT
-  - SOL/USDT
-  - UNI/USDT
-  - DOT/USDT
-  - BNB/USDT
+- **Multi-Pair Trading**: Trades 13 major cryptocurrency pairs on Hyperliquid with USDC:
+  - BTC/USDC
+  - ETH/USDC
+  - SOL/USDC
+  - UNI/USDC
+  - DOT/USDC
+  - BNB/USDC
+  - ADA/USDC
+  - LTC/USDC
+  - AVAX/USDC
+  - XRP/USDC
+  - DOGE/USDC
+  - MATIC/USDC
+  - SHIB/USDC
 - **Persistent Order Tracking**: 
   - Pending orders are saved to disk and persist across restarts
   - Automatic reconciliation of exchange orders at startup
@@ -32,7 +39,7 @@ A sophisticated cryptocurrency trading bot based on the LuxAlgo Order Block dete
   - Entry/exit points
   - Take profit and stop loss levels
 - **Live Trading Dashboard**:
-  - Wallet balance in USDT
+  - Wallet balance in USDC
   - Active positions with unrealized P&L
   - Trade history
   - Order block information
@@ -51,7 +58,7 @@ cd HunterZ
 pip install -r requirements.txt
 ```
 
-3. Configure your Binance API credentials:
+3. Configure your Hyperliquid API credentials:
 ```bash
 cp .env.example .env
 # Edit .env with your actual API credentials
@@ -59,18 +66,17 @@ cp .env.example .env
 
 ## Configuration
 
-Edit the `.env` file with your Binance API credentials:
+Edit the `.env` file with your Hyperliquid API credentials:
 
 ```
-BINANCE_API_KEY=your_api_key_here
-BINANCE_API_SECRET=your_api_secret_here
-BINANCE_TESTNET=True  # Set to False for production trading
+HYPERLIQUID_WALLET_ADDRESS=your_wallet_address_here
+HYPERLIQUID_PRIVATE_KEY=your_private_key_here
 ```
 
 **Important**: 
-- Start with testnet mode (BINANCE_TESTNET=True) to test the system
-- Only switch to production after thorough testing
-- Never share your API keys
+- This bot is configured for Hyperliquid live trading
+- All trading pairs use USDC as the quote currency
+- Never share your private keys
 
 ## Usage
 
@@ -114,8 +120,8 @@ The bot implements the LuxAlgo Order Block strategy:
 ### Dashboard Sections
 
 1. **Header Status Bar**: Quick overview of balance, P&L, active positions
-2. **Wallet Overview**: Total USDT balance, available funds, funds in positions
-3. **Live Trading Charts**: Six charts showing real-time data with order blocks
+2. **Wallet Overview**: Total USDC balance, available funds, funds in positions
+3. **Live Trading Charts**: Thirteen charts showing real-time data with order blocks
 4. **Active Positions Table**: Details of all open positions
 5. **Trade History**: Recent completed trades
 
@@ -170,7 +176,7 @@ HunterZ/
 ├── main.py             # Main trading bot logic
 ├── config.py           # Configuration and settings
 ├── lux_algo.py         # Order block detection algorithm
-├── execution.py        # Binance exchange interface
+├── execution.py        # Hyperliquid exchange interface
 ├── risk_manager.py     # Risk management and position sizing
 ├── state.py            # Global state management
 ├── utils.py            # Utility functions
@@ -215,9 +221,9 @@ Test coverage includes:
 ## Troubleshooting
 
 ### Connection Issues
-- Ensure your API keys are correct
-- Check if Binance API is accessible from your region
-- Verify testnet mode setting matches your API keys
+- Ensure your wallet address and private key are correct
+- Check if Hyperliquid API is accessible from your region
+- Verify your wallet has sufficient funds
 
 ### Charts Not Displaying
 - The frontend uses TradingView Lightweight Charts from CDN
@@ -269,23 +275,23 @@ The bot now automatically ensures all positions have proper TP/SL orders:
 
 **Testing Scenarios:**
 1. **Manual Repair Test**:
-   - Start bot with testnet
+   - Start bot with Hyperliquid
    - Place a trade and wait for entry fill
-   - Manually cancel SL or TP order on Binance UI
+   - Manually cancel SL or TP order on Hyperliquid UI
    - Wait for next reconciliation cycle (up to 10 min) or restart bot
    - Verify missing order is recreated
 
 2. **Manual Limit Order Cancellation**:
-   - Start bot with testnet
+   - Start bot with Hyperliquid
    - Wait for bot to place a limit entry order for an OB
-   - Manually cancel the limit order on Binance UI
+   - Manually cancel the limit order on Hyperliquid UI
    - Bot will detect the cancellation on next cycle (2 min)
    - If OB opportunity still exists, bot will place the order back
    - No duplicate orders will be created
 
 3. **Quantity Mismatch Test**:
    - Open a position
-   - Manually modify TP/SL order quantity on Binance
+   - Manually modify TP/SL order quantity on Hyperliquid
    - Restart bot or wait for reconciliation
    - Verify old orders are cancelled and new ones created with correct size
 

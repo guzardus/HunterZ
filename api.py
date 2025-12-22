@@ -58,7 +58,7 @@ def get_status():
 
 @app.get("/api/balance")
 def get_balance():
-    """Get wallet balance in USDT"""
+    """Get wallet balance in USDC"""
     total_unrealized_pnl = sum(
         pos.get('unrealized_pnl', 0) 
         for pos in state.bot_state.positions.values()
@@ -67,7 +67,7 @@ def get_balance():
         "total": state.bot_state.total_balance,
         "free": state.bot_state.free_balance,
         "unrealized_pnl": total_unrealized_pnl,
-        "currency": "USDT"
+        "currency": "USDC"
     }
 
 @app.get("/api/positions")
@@ -90,7 +90,7 @@ def get_market_data(symbol: str):
     # Normalize symbol format
     decoded_symbol = symbol.replace('-', '/').upper()
     if '/' not in decoded_symbol:
-        decoded_symbol = decoded_symbol.replace('USDT', '/USDT')
+        decoded_symbol = decoded_symbol.replace('USDC', '/USDC')
     
     ohlcv = state.bot_state.ohlcv_data.get(decoded_symbol, [])
     obs = state.bot_state.order_blocks.get(decoded_symbol, [])

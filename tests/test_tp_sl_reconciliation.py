@@ -25,16 +25,16 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
     
     def test_compute_position_tp_sl_with_both_orders(self):
         """Test computing TP/SL when both orders exist"""
-        symbol = 'BTC/USDT'
+        symbol = 'BTC/USDC'
         exchange_orders = [
             {
-                'symbol': 'BTC/USDT',
+                'symbol': 'BTC/USDC',
                 'type': 'STOP_MARKET',
                 'reduceOnly': True,
                 'stopPrice': 40000.0
             },
             {
-                'symbol': 'BTC/USDT',
+                'symbol': 'BTC/USDC',
                 'type': 'TAKE_PROFIT_MARKET',
                 'reduceOnly': True,
                 'stopPrice': 50000.0
@@ -48,10 +48,10 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
     
     def test_compute_position_tp_sl_with_only_sl(self):
         """Test computing TP/SL when only SL exists"""
-        symbol = 'ETH/USDT'
+        symbol = 'ETH/USDC'
         exchange_orders = [
             {
-                'symbol': 'ETH/USDT',
+                'symbol': 'ETH/USDC',
                 'type': 'STOP_MARKET',
                 'reduceOnly': True,
                 'stopPrice': 2800.0
@@ -65,10 +65,10 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
     
     def test_compute_position_tp_sl_with_only_tp(self):
         """Test computing TP/SL when only TP exists"""
-        symbol = 'SOL/USDT'
+        symbol = 'SOL/USDC'
         exchange_orders = [
             {
-                'symbol': 'SOL/USDT',
+                'symbol': 'SOL/USDC',
                 'type': 'TAKE_PROFIT_MARKET',
                 'reduceOnly': True,
                 'stopPrice': 120.0
@@ -82,10 +82,10 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
     
     def test_compute_position_tp_sl_no_orders(self):
         """Test computing TP/SL when no TP/SL orders exist"""
-        symbol = 'BNB/USDT'
+        symbol = 'BNB/USDC'
         exchange_orders = [
             {
-                'symbol': 'BNB/USDT',
+                'symbol': 'BNB/USDC',
                 'type': 'LIMIT',
                 'reduceOnly': False
             }
@@ -98,10 +98,10 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
     
     def test_compute_position_tp_sl_different_symbol(self):
         """Test that TP/SL from different symbol is not used"""
-        symbol = 'BTC/USDT'
+        symbol = 'BTC/USDC'
         exchange_orders = [
             {
-                'symbol': 'ETH/USDT',  # Different symbol
+                'symbol': 'ETH/USDC',  # Different symbol
                 'type': 'STOP_MARKET',
                 'reduceOnly': True,
                 'stopPrice': 2800.0
@@ -116,8 +116,8 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
     def test_enrich_positions_with_tp_sl(self):
         """Test enriching positions with TP/SL from orders"""
         # Set up a position
-        state.bot_state.positions['BTC/USDT'] = {
-            'symbol': 'BTC/USDT',
+        state.bot_state.positions['BTC/USDC'] = {
+            'symbol': 'BTC/USDC',
             'side': 'LONG',
             'size': 0.1,
             'entry_price': 45000.0,
@@ -131,13 +131,13 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
         # Set up exchange orders
         state.bot_state.exchange_open_orders = [
             {
-                'symbol': 'BTC/USDT',
+                'symbol': 'BTC/USDC',
                 'type': 'STOP_MARKET',
                 'reduceOnly': True,
                 'stopPrice': 43000.0
             },
             {
-                'symbol': 'BTC/USDT',
+                'symbol': 'BTC/USDC',
                 'type': 'TAKE_PROFIT_MARKET',
                 'reduceOnly': True,
                 'stopPrice': 49000.0
@@ -148,23 +148,23 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
         state.enrich_positions_with_tp_sl()
         
         # Verify TP/SL were added
-        position = state.bot_state.positions['BTC/USDT']
+        position = state.bot_state.positions['BTC/USDC']
         self.assertEqual(position['stop_loss'], 43000.0)
         self.assertEqual(position['take_profit'], 49000.0)
     
     def test_enrich_positions_with_tp_sl_multiple_positions(self):
         """Test enriching multiple positions with their respective TP/SL"""
         # Set up multiple positions
-        state.bot_state.positions['BTC/USDT'] = {
-            'symbol': 'BTC/USDT',
+        state.bot_state.positions['BTC/USDC'] = {
+            'symbol': 'BTC/USDC',
             'side': 'LONG',
             'size': 0.1,
             'entry_price': 45000.0,
             'take_profit': None,
             'stop_loss': None
         }
-        state.bot_state.positions['ETH/USDT'] = {
-            'symbol': 'ETH/USDT',
+        state.bot_state.positions['ETH/USDC'] = {
+            'symbol': 'ETH/USDC',
             'side': 'SHORT',
             'size': 2.0,
             'entry_price': 3000.0,
@@ -175,22 +175,22 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
         # Set up exchange orders for both
         state.bot_state.exchange_open_orders = [
             {
-                'symbol': 'BTC/USDT',
+                'symbol': 'BTC/USDC',
                 'type': 'STOP_MARKET',
                 'stopPrice': 43000.0
             },
             {
-                'symbol': 'BTC/USDT',
+                'symbol': 'BTC/USDC',
                 'type': 'TAKE_PROFIT_MARKET',
                 'stopPrice': 49000.0
             },
             {
-                'symbol': 'ETH/USDT',
+                'symbol': 'ETH/USDC',
                 'type': 'STOP_MARKET',
                 'stopPrice': 3100.0
             },
             {
-                'symbol': 'ETH/USDT',
+                'symbol': 'ETH/USDC',
                 'type': 'TAKE_PROFIT_MARKET',
                 'stopPrice': 2800.0
             }
@@ -200,11 +200,11 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
         state.enrich_positions_with_tp_sl()
         
         # Verify both positions got correct TP/SL
-        btc_position = state.bot_state.positions['BTC/USDT']
+        btc_position = state.bot_state.positions['BTC/USDC']
         self.assertEqual(btc_position['stop_loss'], 43000.0)
         self.assertEqual(btc_position['take_profit'], 49000.0)
         
-        eth_position = state.bot_state.positions['ETH/USDT']
+        eth_position = state.bot_state.positions['ETH/USDC']
         self.assertEqual(eth_position['stop_loss'], 3100.0)
         self.assertEqual(eth_position['take_profit'], 2800.0)
 
