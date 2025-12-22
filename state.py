@@ -5,7 +5,7 @@ import json
 import os
 
 # Configuration constants
-MAX_BALANCE_HISTORY_POINTS = 500  # About 40 hours at 5-minute intervals
+MAX_BALANCE_HISTORY_POINTS = 5000  # About 17 days at 5-minute intervals (enough for 2+ weeks)
 MAX_RECONCILIATION_LOG_ENTRIES = 50  # Maximum entries in reconciliation log
 
 @dataclass
@@ -59,6 +59,13 @@ def update_full_balance(total: float, free: float, used: float):
         'used_balance': used,
         'total_pnl': bot_state.total_pnl
     })
+    
+    # Trim to keep only MAX_BALANCE_HISTORY_POINTS most recent entries
+    if len(bot_state.balance_history) > MAX_BALANCE_HISTORY_POINTS:
+        bot_state.balance_history = bot_state.balance_history[-MAX_BALANCE_HISTORY_POINTS:]
+    
+    # Save balance history to disk
+    save_balance_history()
     
 def update_exchange_open_orders(orders: List[Dict]):
     """Update the list of open orders from the exchange.
@@ -344,6 +351,7 @@ def get_pending_order(symbol: str):
 PENDING_ORDERS_FILE = os.path.join(os.path.dirname(__file__), 'data', 'pending_orders.json')
 METRICS_FILE = os.path.join(os.path.dirname(__file__), 'data', 'metrics.json')
 TRADE_HISTORY_FILE = os.path.join(os.path.dirname(__file__), 'data', 'trade_history.json')
+BALANCE_HISTORY_FILE = os.path.join(os.path.dirname(__file__), 'data', 'balance_history.json')
 
 def save_pending_orders():
     """Save pending orders to disk"""
@@ -467,10 +475,37 @@ def load_trade_history_on_startup():
         print(f"WARNING: Failed to load trade history: {e}")
         bot_state.trade_history = []
 
+def save_balance_history():
+    """Save balance history to disk"""
+    try:
+        os.makedirs(os.path.dirname(BALANCE_HISTORY_FILE), exist_ok=True)
+        with open(BALANCE_HISTORY_FILE, 'w') as f:
+            json.dump(bot_state.balance_history, f, indent=2)
+    except Exception as e:
+        print(f"WARNING: Failed to save balance history: {e}")
+
+def load_balance_history_on_startup():
+    """Load balance history from disk"""
+    try:
+        if os.path.exists(BALANCE_HISTORY_FILE):
+            with open(BALANCE_HISTORY_FILE, 'r') as f:
+                loaded = json.load(f)
+                bot_state.balance_history = loaded
+                print(f"Loaded {len(loaded)} balance history entries from disk")
+        else:
+            print("No balance history file found, starting fresh")
+    except json.JSONDecodeError as e:
+        print(f"WARNING: Corrupted balance history file, starting fresh: {e}")
+        bot_state.balance_history = []
+    except Exception as e:
+        print(f"WARNING: Failed to load balance history: {e}")
+        bot_state.balance_history = []
+
 def init():
     """Initialize state on startup"""
     print("Initializing bot state...")
     load_pending_orders_on_startup()
     load_metrics_on_startup()
     load_trade_history_on_startup()
+    load_balance_history_on_startup()
     print("Bot state initialized")
