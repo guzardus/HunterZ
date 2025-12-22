@@ -23,17 +23,7 @@ FORCED_CLOSURE_RATE_LIMIT_DELAY = 0.5  # Delay in seconds between forced closure
 
 # Symbol filtering - Using USDC pairs for Hyperliquid
 TRADING_PAIRS = [
-    'BTC/USDC',
-    'ETH/USDC',
-    'SOL/USDC',
-    'UNI/USDC',
-    'DOT/USDC',
-    'BNB/USDC',
-    'ADA/USDC',
-    'LTC/USDC',
-    'AVAX/USDC',
-    'XRP/USDC',
-    'DOGE/USDC',
-    'MATIC/USDC',
-    'SHIB/USDC'
+    'BTC/USDC:USDC',
+    'ETH/USDC:USDC',
+    'SOL/USDC:USDC'
 ]

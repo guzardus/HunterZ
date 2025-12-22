@@ -7,6 +7,9 @@ class HyperliquidClient:
         self.exchange = ccxt.hyperliquid({
             'walletAddress': config.WALLET_ADDRESS,
             'privateKey': config.PRIVATE_KEY,
+            'options': {
+                'defaultType': 'swap'
+            }
         })
         print("Hyperliquid Live Trading Enabled")
 
@@ -21,7 +24,8 @@ class HyperliquidClient:
     def get_balance(self):
         try:
             balance = self.exchange.fetch_balance()
-            return balance['USDC']['free']
+            usdc_balance = balance.get('USDC', {})
+            return float(usdc_balance.get('free', 0))
         except Exception as e:
             print(f"Error fetching balance: {e}")
             return 0.0
@@ -105,10 +109,14 @@ class HyperliquidClient:
 
     def cancel_all_orders(self, symbol):
         try:
-            self.exchange.cancel_all_orders(symbol)
-            print(f"Cancelled all orders for {symbol}")
+            orders = self.get_open_orders(symbol)
+            for order in orders:
+                self.exchange.cancel_order(order['id'], symbol)
+            print(f"Manually cancelled {len(orders)} orders for {symbol}")
+            return True
         except Exception as e:
-            print(f"Error cancelling orders for {symbol}: {e}")
+            print(f"Error in manual cancel_all_orders for {symbol}: {e}")
+            return False
 
     def place_limit_order(self, symbol, side, amount, price):
         try:
