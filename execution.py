@@ -7,6 +7,9 @@ class HyperliquidClient:
         self.exchange = ccxt.hyperliquid({
             'walletAddress': config.WALLET_ADDRESS,
             'privateKey': config.PRIVATE_KEY,
+            'options': {
+                'defaultType': 'swap'
+            }
         })
         print("Hyperliquid Live Trading Enabled")
 
@@ -21,7 +24,9 @@ class HyperliquidClient:
     def get_balance(self):
         try:
             balance = self.exchange.fetch_balance()
-            return balance['USDC']['free']
+            usdc_balance = balance.get('USDC', {})
+            free_value = usdc_balance.get('free', 0)
+            return float(free_value)
         except Exception as e:
             print(f"Error fetching balance: {e}")
             return 0.0
@@ -105,10 +110,33 @@ class HyperliquidClient:
 
     def cancel_all_orders(self, symbol):
         try:
-            self.exchange.cancel_all_orders(symbol)
-            print(f"Cancelled all orders for {symbol}")
+            orders = self.exchange.fetch_open_orders(symbol)
+            if not orders:
+                print(f"No open orders to cancel for {symbol}")
+                return True
+            success_count = 0
+            failed = 0
+            skipped = 0
+            for order in orders:
+                order_id = order.get('id')
+                if not order_id:
+                    skipped += 1
+                    print(f"Order missing id for {symbol}, skipping cancel")
+                    continue
+                try:
+                    self.exchange.cancel_order(order_id, symbol)
+                    success_count += 1
+                    print(f"Cancelled order {order_id} for {symbol}")
+                except Exception as order_error:
+                    failed += 1
+                    print(f"Error cancelling order {order_id} for {symbol}: {order_error}")
+            cancelled = success_count
+            success = failed == 0
+            print(f"Manually cancelled {cancelled} orders for {symbol} (failed: {failed}, skipped: {skipped}, success: {success})")
+            return success
         except Exception as e:
-            print(f"Error cancelling orders for {symbol}: {e}")
+            print(f"Error in manual cancel_all_orders for {symbol}: {e}")
+            return False
 
     def place_limit_order(self, symbol, side, amount, price):
         try:
