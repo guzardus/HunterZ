@@ -26,9 +26,10 @@ class HyperliquidClient:
             balance = self.exchange.fetch_balance()
             usdc_balance = balance.get('USDC', {})
             free_value = usdc_balance.get('free', 0)
-            return float(free_value)
-        except (TypeError, ValueError):
-            return 0.0
+            try:
+                return float(free_value)
+            except (TypeError, ValueError):
+                return 0.0
         except Exception as e:
             print(f"Error fetching balance: {e}")
             return 0.0
@@ -113,6 +114,9 @@ class HyperliquidClient:
     def cancel_all_orders(self, symbol):
         try:
             orders = self.get_open_orders(symbol)
+            if not orders:
+                print(f"No open orders to cancel for {symbol}")
+                return True
             failed = 0
             skipped = 0
             for order in orders:
@@ -128,7 +132,7 @@ class HyperliquidClient:
                     print(f"Error cancelling order {order_id} for {symbol}: {order_error}")
             cancelled = len(orders) - failed - skipped
             print(f"Manually cancelled {cancelled} orders for {symbol} (failed: {failed}, skipped: {skipped})")
-            return cancelled > 0 and failed == 0
+            return failed == 0 and skipped == 0
         except Exception as e:
             print(f"Error in manual cancel_all_orders for {symbol}: {e}")
             return False
