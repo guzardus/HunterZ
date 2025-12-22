@@ -114,10 +114,11 @@ class HyperliquidClient:
         try:
             orders = self.get_open_orders(symbol)
             failed = 0
+            skipped = 0
             for order in orders:
                 order_id = order.get('id')
                 if not order_id:
-                    failed += 1
+                    skipped += 1
                     print(f"Order missing id for {symbol}, skipping cancel")
                     continue
                 try:
@@ -125,7 +126,8 @@ class HyperliquidClient:
                 except Exception as order_error:
                     failed += 1
                     print(f"Error cancelling order {order_id} for {symbol}: {order_error}")
-            print(f"Manually cancelled {len(orders) - failed} orders for {symbol}")
+            cancelled = len(orders) - failed - skipped
+            print(f"Manually cancelled {cancelled} orders for {symbol} (failed: {failed}, skipped: {skipped})")
             return True
         except Exception as e:
             print(f"Error in manual cancel_all_orders for {symbol}: {e}")
