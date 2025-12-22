@@ -3,6 +3,7 @@ import config
 
 class HyperliquidClient:
     def __init__(self):
+        # Requires ccxt >= 4.4.0 for Hyperliquid support
         self.exchange = ccxt.hyperliquid({
             'walletAddress': config.WALLET_ADDRESS,
             'privateKey': config.PRIVATE_KEY,
