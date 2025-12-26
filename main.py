@@ -1,4 +1,5 @@
 import time
+import datetime
 import pandas as pd
 import config
 import utils
@@ -609,6 +610,16 @@ def monitor_and_close_positions(client):
                         should_close = True
                         close_reason = "sl_breach"
                 
+                # Sanity check: ensure TP/SL are on the correct side of entry before forcing closure
+                if side == 'LONG':
+                    if (take_profit and take_profit <= entry_price) or (stop_loss and stop_loss >= entry_price):
+                        print(f"⚠️ Skipping closure for {symbol}: TP/SL inconsistent for LONG (entry {entry_price}, TP {take_profit}, SL {stop_loss})")
+                        continue
+                elif side == 'SHORT':
+                    if (take_profit and take_profit >= entry_price) or (stop_loss and stop_loss <= entry_price):
+                        print(f"⚠️ Skipping closure for {symbol}: TP/SL inconsistent for SHORT (entry {entry_price}, TP {take_profit}, SL {stop_loss})")
+                        continue
+                
                 # If breach detected, force close the position
                 if should_close and close_reason:
                     print(f"\n⚠️ BREACH DETECTED for {symbol}!")
@@ -726,6 +737,22 @@ def run_bot_logic():
                         original_amount = float(order_status.get('amount', 0))
                         filled_amount = float(order_status.get('filled', 0))
                         remaining_amount = original_amount - filled_amount
+                        if order_status.get('status') == 'open' and filled_amount == 0:
+                            pending_ts = pending.get('timestamp')
+                            try:
+                                if pending_ts:
+                                    now_ts = datetime.datetime.now(tz=datetime.timezone.utc)
+                                    parsed_ts = datetime.datetime.fromisoformat(pending_ts)
+                                    if parsed_ts.tzinfo is None:
+                                        parsed_ts = parsed_ts.replace(tzinfo=datetime.timezone.utc)
+                                    age_seconds = (now_ts - parsed_ts).total_seconds()
+                                    if age_seconds > config.PENDING_ORDER_STALE_SECONDS:
+                                        print(f"Pending order {pending['order_id']} for {symbol} stale ({age_seconds:.0f}s), attempting cancel and replace")
+                                        client.cancel_order(symbol, pending['order_id'])
+                                        state.remove_pending_order(symbol)
+                                        continue
+                            except Exception as e:
+                                print(f"Warning: could not evaluate staleness for {symbol} pending order {pending['order_id']}: {e}")
                         
                         # Check if order is fully filled
                         if order_status.get('status') == 'filled':
