@@ -73,9 +73,7 @@ def _find_matching_reduce_only_from_state(symbol, target_price, target_qty, orde
     """
     import state  # Local import to avoid circular dependency
 
-    cached_orders = orders
-    if cached_orders is None:
-        cached_orders = state.bot_state.exchange_open_orders
+    cached_orders = orders or state.bot_state.exchange_open_orders
 
     for order in cached_orders:
         mapped_order = {
