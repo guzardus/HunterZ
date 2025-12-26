@@ -68,6 +68,19 @@ class TestManualOrderCancellation(unittest.TestCase):
         # Verify it's removed
         self.assertIsNone(state.get_pending_order(symbol))
 
+    def test_pending_order_exchange_ids_are_persisted(self):
+        """Exchange TP/SL ids should be stored on the pending order"""
+        symbol = 'BTC/USDC'
+
+        state.add_pending_order(symbol, 'order_123', {'side': 'buy'})
+        state.update_pending_order_exchange_orders(symbol, {'id': 'sl_1'}, {'id': 'tp_1'})
+
+        pending = state.get_pending_order(symbol)
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending['exchange_orders']['sl'], 'sl_1')
+        self.assertEqual(pending['exchange_orders']['tp'], 'tp_1')
+        self.assertIsNotNone(pending.get('last_tp_sl_placement'))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -66,6 +66,27 @@ def order_matches_target(order, target_price, target_qty, price_tol=PRICE_TOLERA
     return price_matches and qty_matches
 
 
+def _find_matching_reduce_only_from_state(symbol, target_price, target_qty):
+    """
+    Check the cached exchange_open_orders in state for a matching reduce-only order.
+    This helps avoid duplicate placements when the exchange API response lags.
+    """
+    import state  # Local import to avoid circular dependency
+
+    for order in state.bot_state.exchange_open_orders:
+        if order.get('symbol') != symbol or not order.get('reduce_only'):
+            continue
+        mapped_order = {
+            'id': order.get('order_id') or order.get('id'),
+            'stopPrice': order.get('stop_price') or order.get('price'),
+            'price': order.get('price'),
+            'amount': order.get('amount')
+        }
+        if order_matches_target(mapped_order, target_price, target_qty):
+            return mapped_order
+    return None
+
+
 def _validate_order_response(resp):
     """
     Ensure the order response contains at least one valid ID field.
@@ -429,6 +450,16 @@ class HyperliquidClient:
         existing_tp_sl = self.get_tp_sl_orders_for_position(symbol)
         existing_sl = existing_tp_sl.get('sl_order')
         existing_tp = existing_tp_sl.get('tp_order')
+
+        # Use cached exchange_open_orders as a secondary source to avoid duplicates when API lags
+        if not existing_sl:
+            state_match_sl = _find_matching_reduce_only_from_state(symbol, sl_price, amount)
+            if state_match_sl:
+                existing_sl = state_match_sl
+        if not existing_tp:
+            state_match_tp = _find_matching_reduce_only_from_state(symbol, tp_price, amount)
+            if state_match_tp:
+                existing_tp = state_match_tp
         
         sl_order = None
         tp_order = None

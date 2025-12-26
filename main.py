@@ -366,6 +366,8 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
                 orders = client.place_sl_tp_orders(symbol, 'buy' if is_long else 'sell', 
                                                   formatted_size, sl_price, tp_price)
                 if orders['sl_order'] and orders['tp_order']:
+                    if pending_order:
+                        state.update_pending_order_exchange_orders(symbol, orders['sl_order'], orders['tp_order'])
                     print(f"✓ Successfully placed both TP and SL for {symbol}")
                     state.add_reconciliation_log("tp_sl_placed", {
                         "symbol": symbol,
@@ -830,6 +832,7 @@ def run_bot_logic():
                             
                             if orders['sl_order'] and orders['tp_order']:
                                 print(f"TP/SL orders successfully placed for {symbol}")
+                                state.update_pending_order_exchange_orders(symbol, orders['sl_order'], orders['tp_order'])
                                 state.bot_state.metrics.filled_orders_count += 1
                                 state.save_metrics()
                             else:
@@ -874,6 +877,7 @@ def run_bot_logic():
                             
                             if orders['sl_order'] and orders['tp_order']:
                                 print(f"TP/SL placed for partial fill: {filled_qty}")
+                                state.update_pending_order_exchange_orders(symbol, orders['sl_order'], orders['tp_order'])
                             
                             # Update pending order with remaining quantity
                             pending['params']['quantity'] = remaining_amount
