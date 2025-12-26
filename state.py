@@ -35,6 +35,10 @@ class BotState:
     reconciliation_log: List[Dict] = field(default_factory=list) # Log of reconciliation actions
     metrics: Metrics = field(default_factory=Metrics)
     balance_history: List[Dict] = field(default_factory=list) # Portfolio balance over time
+    # Track previously logged pending order IDs to reduce log noise
+    _logged_pending_order_ids: Dict[str, str] = field(default_factory=dict)  # symbol -> order_id
+    # Track positions that have already warned about exit_price fallback
+    _exit_price_fallback_warned: set = field(default_factory=set)  # set of symbols
 
 # Global instance
 bot_state = BotState()
@@ -287,8 +291,8 @@ def _close_trade_in_history(symbol: str, old_position: Dict):
             exit_price = old_position.get('mark_price', 0)
             if exit_price == 0:
                 exit_price = old_position.get('entry_price', 0)
-                if exit_price > 0:
-                    print(f"Warning: Using entry_price as exit_price fallback for {symbol}")
+                if exit_price > 0 and should_warn_exit_price_fallback(symbol):
+                    print(f"Warning: Using entry_price as exit_price fallback for {symbol} (mark_price was 0 or unavailable)")
             
             entry_price = trade.get('entry_price', old_position.get('entry_price', 0))
             size = trade.get('size', old_position.get('size', 0))
@@ -312,6 +316,9 @@ def _close_trade_in_history(symbol: str, old_position: Dict):
             
             # Save trade history after closing a trade
             save_trade_history()
+            
+            # Clear the exit price fallback warning tracking for this symbol
+            clear_exit_price_fallback_warning(symbol)
             
             print(f"Trade closed for {symbol}: PnL = {pnl:.2f} USDC")
             break
@@ -341,11 +348,73 @@ def remove_pending_order(symbol: str):
     if symbol in bot_state.pending_orders:
         del bot_state.pending_orders[symbol]
         bot_state.metrics.pending_orders_count = len(bot_state.pending_orders)
+        # Clear log tracking so future orders can be logged
+        clear_pending_order_log_tracking(symbol)
         save_pending_orders()
 
 def get_pending_order(symbol: str):
     """Get pending order info for a symbol"""
     return bot_state.pending_orders.get(symbol)
+
+def should_log_pending_order_still_active(symbol: str, order_id: str) -> bool:
+    """Check if we should log 'pending order still active' message.
+    
+    To reduce log noise, we only log this message the first time we
+    detect a pending order is still active. Subsequent checks for the
+    same order_id will not be logged.
+    
+    Args:
+        symbol: Trading symbol
+        order_id: The order ID being checked
+        
+    Returns:
+        bool: True if we should log, False if already logged for this order
+    """
+    previously_logged_id = bot_state._logged_pending_order_ids.get(symbol)
+    if previously_logged_id == order_id:
+        # Already logged for this order, don't log again
+        return False
+    # New order or different order, mark as logged and return True
+    bot_state._logged_pending_order_ids[symbol] = order_id
+    return True
+
+def clear_pending_order_log_tracking(symbol: str):
+    """Clear the log tracking for a pending order when it's removed.
+    
+    This should be called when a pending order is removed/processed
+    so that if a new order is placed for the same symbol, it will be logged.
+    
+    Args:
+        symbol: Trading symbol
+    """
+    if symbol in bot_state._logged_pending_order_ids:
+        del bot_state._logged_pending_order_ids[symbol]
+
+def should_warn_exit_price_fallback(symbol: str) -> bool:
+    """Check if we should warn about using entry_price as exit_price fallback.
+    
+    To reduce log noise, we only warn once per position close attempt.
+    
+    Args:
+        symbol: Trading symbol
+        
+    Returns:
+        bool: True if we should warn, False if already warned
+    """
+    if symbol in bot_state._exit_price_fallback_warned:
+        return False
+    bot_state._exit_price_fallback_warned.add(symbol)
+    return True
+
+def clear_exit_price_fallback_warning(symbol: str):
+    """Clear the exit price fallback warning tracking for a symbol.
+    
+    Should be called when a trade is successfully closed.
+    
+    Args:
+        symbol: Trading symbol
+    """
+    bot_state._exit_price_fallback_warned.discard(symbol)
 
 # Persistence functions
 PENDING_ORDERS_FILE = os.path.join(os.path.dirname(__file__), 'data', 'pending_orders.json')
