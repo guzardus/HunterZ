@@ -250,18 +250,22 @@ class HyperliquidClient:
         Returns:
             dict: Order response if successful, None otherwise
         """
-        params = {'stopPrice': stop_price, 'reduceOnly': True}
+        # Note: For Hyperliquid via CCXT, STOP_MARKET orders require a price parameter
+        # even though they execute at market. We use stop_price as the price.
+        # Also use 'stopLossPrice' as the preferred param key for the trigger.
+        params = {'stopLossPrice': stop_price, 'reduceOnly': True}
         payload = {
             'symbol': symbol,
             'type': 'STOP_MARKET',
             'side': side,
             'amount': amount,
+            'price': stop_price,
             'params': params
         }
         
         for attempt in range(MAX_ORDER_RETRIES):
             try:
-                order = self.exchange.create_order(symbol, 'STOP_MARKET', side, amount, params=params)
+                order = self.exchange.create_order(symbol, 'STOP_MARKET', side, amount, stop_price, params=params)
                 logger.debug("create_order payload=%s response=%s", payload, order)
                 
                 validated = _validate_order_response(order)
@@ -297,18 +301,22 @@ class HyperliquidClient:
         Returns:
             dict: Order response if successful, None otherwise
         """
-        params = {'stopPrice': tp_price, 'reduceOnly': True}
+        # Note: For Hyperliquid via CCXT, TAKE_PROFIT_MARKET orders require a price parameter
+        # even though they execute at market. We use tp_price as the price.
+        # Also use 'takeProfitPrice' as the preferred param key for the trigger.
+        params = {'takeProfitPrice': tp_price, 'reduceOnly': True}
         payload = {
             'symbol': symbol,
             'type': 'TAKE_PROFIT_MARKET',
             'side': side,
             'amount': amount,
+            'price': tp_price,
             'params': params
         }
         
         for attempt in range(MAX_ORDER_RETRIES):
             try:
-                order = self.exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', side, amount, params=params)
+                order = self.exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', side, amount, tp_price, params=params)
                 logger.debug("create_order payload=%s response=%s", payload, order)
                 
                 validated = _validate_order_response(order)
