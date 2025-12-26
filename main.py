@@ -741,7 +741,11 @@ def run_bot_logic():
                             pending_ts = pending.get('timestamp')
                             try:
                                 if pending_ts:
-                                    age_seconds = (datetime.datetime.now() - datetime.datetime.fromisoformat(pending_ts)).total_seconds()
+                                    now_ts = datetime.datetime.now(datetime.timezone.utc)
+                                    parsed_ts = datetime.datetime.fromisoformat(pending_ts)
+                                    if parsed_ts.tzinfo is None:
+                                        parsed_ts = parsed_ts.replace(tzinfo=datetime.timezone.utc)
+                                    age_seconds = (now_ts - parsed_ts).total_seconds()
                                     if age_seconds > 900:  # 15 minutes
                                         print(f"Pending order {pending['order_id']} for {symbol} stale ({age_seconds:.0f}s), attempting cancel and replace")
                                         client.cancel_order(symbol, pending['order_id'])

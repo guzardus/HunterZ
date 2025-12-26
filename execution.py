@@ -159,7 +159,8 @@ class BinanceClient:
             resolved_symbol = self._resolve_symbol(symbol)
             # STOP_MARKET for Futures
             params = {'stopPrice': stop_price, 'reduceOnly': True}
-            print(f"Placing Stop Loss payload: {{'symbol': '{resolved_symbol}', 'side': '{side}', 'amount': {amount}, 'params': {params}}}")
+            payload = {'symbol': resolved_symbol, 'side': side, 'amount': amount, 'params': params}
+            print(f"Placing Stop Loss payload: {payload}")
             order = self.exchange.create_order(resolved_symbol, 'STOP_MARKET', side, amount, params=params)
             print(f"Placed Stop Loss for {resolved_symbol} at {stop_price}")
             return order
@@ -172,7 +173,8 @@ class BinanceClient:
             resolved_symbol = self._resolve_symbol(symbol)
             # TAKE_PROFIT_MARKET for Futures
             params = {'stopPrice': tp_price, 'reduceOnly': True}
-            print(f"Placing Take Profit payload: {{'symbol': '{resolved_symbol}', 'side': '{side}', 'amount': {amount}, 'params': {params}}}")
+            payload = {'symbol': resolved_symbol, 'side': side, 'amount': amount, 'params': params}
+            print(f"Placing Take Profit payload: {payload}")
             order = self.exchange.create_order(resolved_symbol, 'TAKE_PROFIT_MARKET', side, amount, params=params)
             print(f"Placed Take Profit for {resolved_symbol} at {tp_price}")
             return order
