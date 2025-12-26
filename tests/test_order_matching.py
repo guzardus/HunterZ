@@ -79,7 +79,7 @@ class TestOrderMatchesTarget(unittest.TestCase):
     def test_slightly_different_price_within_tolerance(self):
         """Slightly different price within tolerance should match"""
         order = {
-            'stopPrice': 45010.0,  # 0.022% difference
+            'stopPrice': 45010.0,  # ~0.022% difference (within 0.1% tolerance)
             'amount': 0.1
         }
         self.assertTrue(order_matches_target(order, 45000.0, 0.1, price_tol=0.001))
