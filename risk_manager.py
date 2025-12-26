@@ -81,6 +81,8 @@ def compute_tp_sl(entry, tp_pct, sl_pct, side):
     Returns:
         tuple: (take_profit, stop_loss)
     """
+    if tp_pct <= 0 or sl_pct <= 0:
+        raise ValueError(f"tp_pct and sl_pct must be positive. Got tp_pct={tp_pct}, sl_pct={sl_pct}")
     s = side.lower()
     if s == 'long':
         tp = entry * (1 + tp_pct)
@@ -89,10 +91,10 @@ def compute_tp_sl(entry, tp_pct, sl_pct, side):
         tp = entry * (1 - tp_pct)
         sl = entry * (1 + sl_pct)
     else:
-        raise ValueError("Unknown side")
+        raise ValueError("Invalid side: expected 'long' or 'short'")
 
     if s == 'long' and not (tp > entry and sl < entry):
-        raise AssertionError("TP/SL incorrect for LONG")
+        raise ValueError(f"TP/SL incorrect for {s.upper()}: tp={tp}, sl={sl}, entry={entry}")
     if s == 'short' and not (tp < entry and sl > entry):
-        raise AssertionError("TP/SL incorrect for SHORT")
+        raise ValueError(f"TP/SL incorrect for {s.upper()}: tp={tp}, sl={sl}, entry={entry}")
     return tp, sl

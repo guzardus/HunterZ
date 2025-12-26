@@ -1,5 +1,8 @@
 import ccxt
+import logging
 import config
+
+logger = logging.getLogger(__name__)
 
 class BinanceClient:
     def __init__(self):
@@ -20,6 +23,26 @@ class BinanceClient:
                 print(f"Binance client initialized with defaultType={default_type}")
             except Exception:
                 pass
+
+    @staticmethod
+    def _extract_position_meta(position, side_value):
+        """Return signed position size and normalized side based on exchange position or close side hint."""
+        pos_size_local = None
+        pos_side_local = None
+        if position:
+            raw_size = float(position.get('contracts', position.get('positionAmt', position.get('size', 0))) or 0)
+            raw_side_local = position.get('side') or ('short' if raw_size < 0 else 'long')
+            pos_side_local = raw_side_local.lower()
+            pos_size_local = -abs(raw_size) if pos_side_local == 'short' else abs(raw_size)
+        else:
+            inferred = str(side_value).lower()
+            if inferred == 'sell':
+                pos_side_local = 'long'
+            elif inferred == 'buy':
+                pos_side_local = 'short'
+            else:
+                raise ValueError(f"Unknown close side hint: {side_value}")
+        return pos_size_local, pos_side_local
 
     def _resolve_symbol(self, symbol: str) -> str:
         """Resolve a configured symbol to the exact market symbol loaded by ccxt."""
@@ -287,7 +310,7 @@ class BinanceClient:
             print(f"Error cancelling order {order_id} for {symbol}: {e}")
             return False
     
-    def close_position_market(self, symbol, side, amount, reason="manual", position=None):
+    def close_position_market(self, symbol, side, amount, reason="manual"):
         """Close a position immediately with a market order.
         
         Args:
@@ -311,32 +334,19 @@ class BinanceClient:
 
         try:
             # Fetch latest position if not provided for safety checks
-            if position is None:
-                try:
-                    position = self.get_position(symbol)
-                except Exception:
-                    position = None
+            try:
+                position = self.get_position(symbol)
+            except ccxt.BaseError as exc:
+                logger.error("Failed to fetch position for safety check", extra={"symbol": symbol, "error": str(exc)})
+                position = None
 
-            pos_size = None
-            pos_side = None
-            if position:
-                pos_size = float(position.get('contracts', position.get('positionAmt', position.get('size', 0))) or 0)
-                raw_side = position.get('side') or ('short' if pos_size < 0 else 'long')
-                pos_side = raw_side.lower()
-                # Normalize size sign based on side if contracts are positive
-                if pos_size > 0 and pos_side == 'short':
-                    pos_size = -abs(pos_size)
-                elif pos_size < 0 and pos_side == 'long':
-                    pos_size = abs(pos_size)
-            else:
-                # Fallback: infer position side from requested close side
-                pos_side = 'long' if str(side).lower() == 'sell' else 'short'
+            pos_size, pos_side = self._extract_position_meta(position, side)
 
             expected_close_side = 'buy' if pos_side == 'short' else 'sell'
             amount_to_close = abs(pos_size) if pos_size is not None else abs(amount)
 
             # Pre-order safety logging
-            print("Pre-order check", {
+            logger.debug("Pre-order safety validation", extra={
                 "symbol": symbol,
                 "pos_size": pos_size,
                 "pos_side": pos_side,
@@ -345,15 +355,23 @@ class BinanceClient:
             })
 
             if pos_size is not None:
+                # Calculate resulting position: buys add to size, sells subtract; direction depends on existing sign
                 hypo = pos_size + (amount_to_close if expected_close_side == 'buy' else -amount_to_close)
-                if abs(hypo) >= abs(pos_size) and abs(hypo) != 0:
-                    print("Aborting: order WOULD NOT reduce position", {
-                        "hypothetical_pos": hypo,
-                        "pos_size": pos_size,
-                        "side": expected_close_side,
-                        "amount": amount_to_close
-                    })
-                    raise RuntimeError("Refusing to place order that does not reduce position")
+                reduce_ok = abs(hypo) < abs(pos_size) or hypo == 0
+                if not reduce_ok:
+                    logger.error(
+                        "Aborting: order WOULD NOT reduce position",
+                        extra={
+                            "hypothetical_pos": hypo,
+                            "pos_size": pos_size,
+                            "side": expected_close_side,
+                            "amount": amount_to_close,
+                            "symbol": symbol
+                        }
+                    )
+                    raise RuntimeError(
+                        f"Refusing to place order that does not reduce position (hypo={hypo}, current={pos_size}, side={expected_close_side}, amt={amount_to_close})"
+                    )
 
             side = expected_close_side
             amount = amount_to_close
