@@ -913,12 +913,14 @@ def run_bot_logic():
                         order_status = client.get_order_status(symbol, pending_order_id)
                         if order_status and order_status.get('status') == 'open':
                             # Order still exists on exchange, skip new placement
-                            print(f"Pending order {pending_order_id} still active for {symbol}, skipping new placement")
-                            state.add_reconciliation_log("placement_skipped", {
-                                "symbol": symbol,
-                                "order_id": pending_order_id,
-                                "reason": "Pending order still active on exchange"
-                            })
+                            # Only log if this is a new detection to reduce noise
+                            if state.should_log_pending_order_still_active(symbol, pending_order_id):
+                                print(f"Pending order {pending_order_id} still active for {symbol}, skipping new placement")
+                                state.add_reconciliation_log("placement_skipped", {
+                                    "symbol": symbol,
+                                    "order_id": pending_order_id,
+                                    "reason": "Pending order still active on exchange"
+                                })
                             continue
                         else:
                             # Order was cancelled or filled, remove from pending
