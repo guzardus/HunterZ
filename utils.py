@@ -28,6 +28,32 @@ def safe_split(value, sep=':', maxsplit=-1):
     return value.split(sep, maxsplit)
 
 
+def normalize_symbol(symbol):
+    """
+    Normalize a trading symbol to a consistent format.
+    
+    Handles various symbol formats like:
+    - "BTC/USDC:USDC" -> "BTC/USDC:USDC" (already normalized for Hyperliquid)
+    - "BTC/USDC" -> "BTC/USDC"
+    - "BTCUSDC" -> "BTCUSDC"
+    
+    Args:
+        symbol: Input symbol string
+        
+    Returns:
+        str: Normalized symbol string
+    """
+    if not symbol:
+        return symbol
+    
+    resolved = symbol.strip()
+    
+    # Log the normalization for debugging
+    logger.debug("normalize_symbol: input=%s -> resolved=%s", symbol, resolved)
+    
+    return resolved
+
+
 def get_trading_pairs():
     """
     Returns the fixed list of trading pairs from config.

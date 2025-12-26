@@ -16,6 +16,12 @@ class Metrics:
     placed_orders_count: int = 0
     cancelled_orders_count: int = 0
     filled_orders_count: int = 0
+    # New metrics for reconciliation tracking
+    reconciliation_runs_count: int = 0
+    reconciliation_skipped_count: int = 0
+    duplicate_placement_attempts: int = 0
+    order_create_retries_total: int = 0
+    pending_order_stale_count: int = 0
 
 @dataclass
 class BotState:
@@ -334,11 +340,15 @@ def update_total_pnl(pnl: float):
     bot_state.total_pnl = pnl
 
 def add_pending_order(symbol: str, order_id: str, params: Dict):
-    """Track a pending limit order with its intended TP/SL parameters"""
+    """Track a pending limit order with its intended TP/SL parameters.
+    
+    Stores created_at timestamp for stale order detection.
+    """
     bot_state.pending_orders[symbol] = {
         'order_id': order_id,
         'params': params,
-        'timestamp': datetime.datetime.now().isoformat()
+        'timestamp': datetime.datetime.now().isoformat(),
+        'created_at': datetime.datetime.now().isoformat()  # For stale detection
     }
     bot_state.metrics.pending_orders_count = len(bot_state.pending_orders)
     save_pending_orders()
@@ -355,6 +365,38 @@ def remove_pending_order(symbol: str):
 def get_pending_order(symbol: str):
     """Get pending order info for a symbol"""
     return bot_state.pending_orders.get(symbol)
+
+def get_stale_pending_orders(stale_threshold_seconds: int) -> Dict[str, Dict]:
+    """Get all pending orders that are older than the threshold.
+    
+    Args:
+        stale_threshold_seconds: Number of seconds after which an order is considered stale
+        
+    Returns:
+        Dict mapping symbol to pending order info for stale orders
+    """
+    import config  # Import here to avoid circular imports
+    
+    stale_orders = {}
+    now = datetime.datetime.now()
+    
+    for symbol, pending in bot_state.pending_orders.items():
+        created_at_str = pending.get('created_at') or pending.get('timestamp')
+        if not created_at_str:
+            continue
+        
+        try:
+            created_at = datetime.datetime.fromisoformat(created_at_str)
+            age_seconds = (now - created_at).total_seconds()
+            
+            if age_seconds > stale_threshold_seconds:
+                stale_orders[symbol] = pending
+                stale_orders[symbol]['age_seconds'] = age_seconds
+        except (ValueError, TypeError):
+            # Skip if timestamp is invalid
+            continue
+    
+    return stale_orders
 
 def should_log_pending_order_still_active(symbol: str, order_id: str) -> bool:
     """Check if we should log 'pending order still active' message.
@@ -481,7 +523,12 @@ def save_metrics():
             'open_exchange_orders_count': bot_state.metrics.open_exchange_orders_count,
             'placed_orders_count': bot_state.metrics.placed_orders_count,
             'cancelled_orders_count': bot_state.metrics.cancelled_orders_count,
-            'filled_orders_count': bot_state.metrics.filled_orders_count
+            'filled_orders_count': bot_state.metrics.filled_orders_count,
+            'reconciliation_runs_count': bot_state.metrics.reconciliation_runs_count,
+            'reconciliation_skipped_count': bot_state.metrics.reconciliation_skipped_count,
+            'duplicate_placement_attempts': bot_state.metrics.duplicate_placement_attempts,
+            'order_create_retries_total': bot_state.metrics.order_create_retries_total,
+            'pending_order_stale_count': bot_state.metrics.pending_order_stale_count
         }
         with open(METRICS_FILE, 'w') as f:
             json.dump(metrics_data, f, indent=2)
@@ -499,6 +546,11 @@ def load_metrics_on_startup():
                 bot_state.metrics.placed_orders_count = loaded.get('placed_orders_count', 0)
                 bot_state.metrics.cancelled_orders_count = loaded.get('cancelled_orders_count', 0)
                 bot_state.metrics.filled_orders_count = loaded.get('filled_orders_count', 0)
+                bot_state.metrics.reconciliation_runs_count = loaded.get('reconciliation_runs_count', 0)
+                bot_state.metrics.reconciliation_skipped_count = loaded.get('reconciliation_skipped_count', 0)
+                bot_state.metrics.duplicate_placement_attempts = loaded.get('duplicate_placement_attempts', 0)
+                bot_state.metrics.order_create_retries_total = loaded.get('order_create_retries_total', 0)
+                bot_state.metrics.pending_order_stale_count = loaded.get('pending_order_stale_count', 0)
                 print(f"Loaded metrics from disk: {loaded}")
         else:
             print("No metrics file found, starting fresh")
