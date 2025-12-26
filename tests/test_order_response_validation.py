@@ -125,7 +125,11 @@ class TestValidateOrderResponse(unittest.TestCase):
         self.assertIsNone(result)
     
     def test_response_with_zero_id(self):
-        """Test response with zero id returns None (falsy)"""
+        """Test response with zero id returns None.
+        
+        Note: Zero is treated as invalid/falsy since exchange order IDs are typically
+        non-zero strings. This guards against invalid responses more aggressively.
+        """
         resp = {'id': 0, 'status': 'open'}
         result = _validate_order_response(resp)
         self.assertIsNone(result)

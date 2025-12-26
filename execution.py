@@ -12,14 +12,18 @@ RETRY_BACKOFF_SECONDS = [0.5, 1.0, 2.0]
 
 def _validate_order_response(resp):
     """
-    Ensure the order response contains at least one ID field.
-    Returns trimmed resp dict or None if invalid.
+    Ensure the order response contains at least one valid ID field.
+    Returns the response dict if valid, None if invalid or missing ID.
     
     Args:
         resp: Order response from exchange
         
     Returns:
-        dict: The response if valid, None if invalid/missing ID
+        dict: The full response if valid, None if invalid/missing ID
+        
+    Note:
+        An order ID is considered valid if it is truthy (non-None, non-empty, non-zero).
+        This handles the common case where exchanges return None or empty string for failed orders.
     """
     if not resp:
         return None
