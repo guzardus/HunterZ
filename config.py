@@ -27,6 +27,7 @@ FORCED_CLOSURE_RATE_LIMIT_DELAY = 0.5  # Delay in seconds between forced closure
 PENDING_ORDER_STALE_SECONDS = 900  # Cancel and replace pending orders older than 15 minutes
 
 # Symbol filtering
+# Note: MATIC/USDT and SHIB/USDT were removed as they are not available on Binance Testnet
 TRADING_PAIRS = [
     'BTC/USDT',
     'ETH/USDT',
@@ -39,6 +40,4 @@ TRADING_PAIRS = [
     'AVAX/USDT',
     'XRP/USDT',
     'DOGE/USDT',
-    'MATIC/USDT',
-    'SHIB/USDT'
 ]
