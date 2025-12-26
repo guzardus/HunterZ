@@ -456,7 +456,6 @@ class HyperliquidClient:
         # Use cached exchange_open_orders as a secondary source to avoid duplicates when API lags
         state_reduce_orders = None
         if not existing_sl or not existing_tp:
-            import state  # Local import to avoid circular imports
             state_reduce_orders = [
                 o for o in state.bot_state.exchange_open_orders
                 if o.get('symbol') == symbol and o.get('reduce_only')
