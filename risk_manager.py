@@ -66,3 +66,33 @@ def calculate_trade_params(ob, balance, current_price=None):
         'take_profit': take_profit,
         'quantity': quantity
     }
+
+
+def compute_tp_sl(entry, tp_pct, sl_pct, side):
+    """
+    Compute take-profit and stop-loss levels based on side-specific logic.
+
+    Args:
+        entry (float): Entry price
+        tp_pct (float): Take-profit percentage expressed as decimal (e.g., 0.02 for 2%)
+        sl_pct (float): Stop-loss percentage expressed as decimal
+        side (str): 'long' or 'short'
+
+    Returns:
+        tuple: (take_profit, stop_loss)
+    """
+    s = side.lower()
+    if s == 'long':
+        tp = entry * (1 + tp_pct)
+        sl = entry * (1 - sl_pct)
+    elif s == 'short':
+        tp = entry * (1 - tp_pct)
+        sl = entry * (1 + sl_pct)
+    else:
+        raise ValueError("Unknown side")
+
+    if s == 'long' and not (tp > entry and sl < entry):
+        raise AssertionError("TP/SL incorrect for LONG")
+    if s == 'short' and not (tp < entry and sl > entry):
+        raise AssertionError("TP/SL incorrect for SHORT")
+    return tp, sl

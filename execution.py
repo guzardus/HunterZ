@@ -13,6 +13,13 @@ class BinanceClient:
         if config.BINANCE_TESTNET:
             self.exchange.set_sandbox_mode(True)
             print("Binance Testnet Enabled")
+        else:
+            # Explicitly log the market type in use to catch spot/futures mixups
+            try:
+                default_type = self.exchange.options.get('defaultType')
+                print(f"Binance client initialized with defaultType={default_type}")
+            except Exception:
+                pass
 
     def _resolve_symbol(self, symbol: str) -> str:
         """Resolve a configured symbol to the exact market symbol loaded by ccxt."""
@@ -28,6 +35,9 @@ class BinanceClient:
                     if resolved != symbol:
                         print(f"Resolved symbol {symbol} -> {resolved}")
                     return resolved
+            # Log a sample of markets to help diagnose missing symbols (e.g., MATIC/SHIB)
+            sample_keys = list(markets.keys())[:5]
+            print(f"Unable to directly resolve {symbol}. Sample markets: {sample_keys}")
         except Exception as e:
             print(f"Warning: could not resolve symbol {symbol}: {e}")
         return symbol
@@ -277,7 +287,7 @@ class BinanceClient:
             print(f"Error cancelling order {order_id} for {symbol}: {e}")
             return False
     
-    def close_position_market(self, symbol, side, amount, reason="manual"):
+    def close_position_market(self, symbol, side, amount, reason="manual", position=None):
         """Close a position immediately with a market order.
         
         Args:
@@ -300,6 +310,53 @@ class BinanceClient:
             return any('reduceonly' in s or 'reduce only' in s or 'reduce_only' in s for s in indicators if s)
 
         try:
+            # Fetch latest position if not provided for safety checks
+            if position is None:
+                try:
+                    position = self.get_position(symbol)
+                except Exception:
+                    position = None
+
+            pos_size = None
+            pos_side = None
+            if position:
+                pos_size = float(position.get('contracts', position.get('positionAmt', position.get('size', 0))) or 0)
+                raw_side = position.get('side') or ('short' if pos_size < 0 else 'long')
+                pos_side = raw_side.lower()
+                # Normalize size sign based on side if contracts are positive
+                if pos_size > 0 and pos_side == 'short':
+                    pos_size = -abs(pos_size)
+                elif pos_size < 0 and pos_side == 'long':
+                    pos_size = abs(pos_size)
+            else:
+                # Fallback: infer position side from requested close side
+                pos_side = 'long' if str(side).lower() == 'sell' else 'short'
+
+            expected_close_side = 'buy' if pos_side == 'short' else 'sell'
+            amount_to_close = abs(pos_size) if pos_size is not None else abs(amount)
+
+            # Pre-order safety logging
+            print("Pre-order check", {
+                "symbol": symbol,
+                "pos_size": pos_size,
+                "pos_side": pos_side,
+                "expected_close_side": expected_close_side,
+                "amount": amount_to_close
+            })
+
+            if pos_size is not None:
+                hypo = pos_size + (amount_to_close if expected_close_side == 'buy' else -amount_to_close)
+                if abs(hypo) >= abs(pos_size) and abs(hypo) != 0:
+                    print("Aborting: order WOULD NOT reduce position", {
+                        "hypothetical_pos": hypo,
+                        "pos_size": pos_size,
+                        "side": expected_close_side,
+                        "amount": amount_to_close
+                    })
+                    raise RuntimeError("Refusing to place order that does not reduce position")
+
+            side = expected_close_side
+            amount = amount_to_close
             # Create a MARKET order with reduceOnly=True
             params = {'reduceOnly': True}
             resolved_symbol = self._resolve_symbol(symbol)
