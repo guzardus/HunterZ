@@ -7,6 +7,12 @@ import risk_manager
 import state
 from execution import HyperliquidClient
 import threading
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Reconciliation lock to prevent overlapping runs
+_reconciliation_lock = threading.Lock()
 
 def prepare_dataframe(ohlcv):
     """Converts CCXT OHLCV list to DataFrame."""
@@ -493,15 +499,27 @@ def reconcile_all_positions_tp_sl(client):
     This function is called at startup and periodically to ensure
     all positions have proper TP/SL orders.
     
+    Uses a lock to prevent overlapping reconciliation runs.
+    
     Args:
         client: HyperliquidClient instance
     """
-    print("\n=== Starting Position TP/SL Reconciliation ===")
-    state.add_reconciliation_log("position_reconciliation_start", {
-        "message": "Starting position TP/SL reconciliation"
-    })
+    # Try to acquire the lock without blocking
+    if not _reconciliation_lock.acquire(blocking=False):
+        logger.debug("Reconciliation already running - skipping this cycle")
+        state.bot_state.metrics.reconciliation_skipped_count += 1
+        state.add_reconciliation_log("reconciliation_skipped", {
+            "message": "Reconciliation already running, skipped this cycle"
+        })
+        return
     
     try:
+        state.bot_state.metrics.reconciliation_runs_count += 1
+        print("\n=== Starting Position TP/SL Reconciliation ===")
+        state.add_reconciliation_log("position_reconciliation_start", {
+            "message": "Starting position TP/SL reconciliation"
+        })
+        
         # Fetch all open positions
         positions = client.get_all_positions()
         print(f"Found {len(positions)} open positions")
@@ -540,6 +558,8 @@ def reconcile_all_positions_tp_sl(client):
             "error": str(e),
             "message": "Error during position TP/SL reconciliation"
         })
+    finally:
+        _reconciliation_lock.release()
 
 def monitor_and_close_positions(client):
     """Monitor open positions and force-close them if TP/SL levels are breached.
@@ -687,6 +707,69 @@ def monitor_and_close_positions(client):
             'message': 'Top-level error in position monitoring'
         })
 
+def handle_stale_pending_orders(client):
+    """Check for and handle stale pending orders.
+    
+    Orders that have been pending for longer than PENDING_ORDER_STALE_SECONDS
+    are considered stale. This function cancels them and removes from tracking.
+    
+    Args:
+        client: HyperliquidClient instance
+    """
+    stale_orders = state.get_stale_pending_orders(config.PENDING_ORDER_STALE_SECONDS)
+    
+    if not stale_orders:
+        return
+    
+    print(f"\n=== Found {len(stale_orders)} stale pending orders ===")
+    
+    for symbol, pending in stale_orders.items():
+        order_id = pending.get('order_id')
+        age_seconds = pending.get('age_seconds', 0)
+        
+        logger.info("Stale pending order detected: symbol=%s order_id=%s age_seconds=%.0f",
+                   symbol, order_id, age_seconds)
+        
+        try:
+            # Try to cancel the order on the exchange
+            cancelled = client.cancel_order(symbol, order_id)
+            
+            if cancelled:
+                print(f"Cancelled stale order {order_id} for {symbol} (age: {age_seconds:.0f}s)")
+                state.bot_state.metrics.pending_order_stale_count += 1
+                state.bot_state.metrics.cancelled_orders_count += 1
+                state.add_reconciliation_log("stale_order_cancelled", {
+                    "symbol": symbol,
+                    "order_id": order_id,
+                    "age_seconds": age_seconds,
+                    "message": f"Stale pending order cancelled after {age_seconds:.0f}s"
+                })
+            else:
+                # Order may already be gone, just log it
+                print(f"Could not cancel stale order {order_id} for {symbol} (may already be filled/cancelled)")
+                state.add_reconciliation_log("stale_order_removal", {
+                    "symbol": symbol,
+                    "order_id": order_id,
+                    "age_seconds": age_seconds,
+                    "message": "Stale order removed from tracking (cancel failed)"
+                })
+            
+            # Remove from pending orders regardless
+            state.remove_pending_order(symbol)
+            
+        except Exception as e:
+            logger.warning("Error handling stale order %s for %s: %s", order_id, symbol, e)
+            # Remove from pending orders to prevent repeated errors
+            state.remove_pending_order(symbol)
+            state.add_reconciliation_log("stale_order_error", {
+                "symbol": symbol,
+                "order_id": order_id,
+                "error": str(e),
+                "message": "Error handling stale order, removed from tracking"
+            })
+    
+    state.save_metrics()
+
 def run_bot_logic():
     print("Starting LuxAlgo Order Block Bot Logic...")
     
@@ -715,6 +798,8 @@ def run_bot_logic():
             if current_time - last_position_reconciliation > config.POSITION_RECONCILIATION_INTERVAL:
                 print("\n--- Periodic Position Reconciliation ---")
                 reconcile_all_positions_tp_sl(client)
+                # Also check for stale pending orders
+                handle_stale_pending_orders(client)
                 last_position_reconciliation = current_time
             
             # 1. Check and process any pending orders first

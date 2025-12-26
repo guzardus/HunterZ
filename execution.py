@@ -9,6 +9,62 @@ logger = logging.getLogger(__name__)
 MAX_ORDER_RETRIES = 3
 RETRY_BACKOFF_SECONDS = [0.5, 1.0, 2.0]
 
+# Tolerances for order matching
+PRICE_TOLERANCE_PCT = 0.001  # 0.1% tolerance for price matching
+QUANTITY_TOLERANCE_PCT = 0.01  # 1% tolerance for quantity matching
+
+
+def approx_equal(a, b, pct_tol=0.01):
+    """
+    Check if two values are approximately equal within a percentage tolerance.
+    
+    Args:
+        a: First value
+        b: Second value  
+        pct_tol: Percentage tolerance (default 1%)
+        
+    Returns:
+        bool: True if values are approximately equal
+    """
+    if a == 0 and b == 0:
+        return True
+    if a == 0 or b == 0:
+        return False
+    return abs(a - b) / max(abs(a), abs(b)) <= pct_tol
+
+
+def order_matches_target(order, target_price, target_qty, price_tol=PRICE_TOLERANCE_PCT, qty_tol=QUANTITY_TOLERANCE_PCT):
+    """
+    Check if an existing order matches the target price and quantity.
+    
+    Args:
+        order: Order dict from exchange
+        target_price: Expected price/stop price
+        target_qty: Expected quantity
+        price_tol: Tolerance for price matching
+        qty_tol: Tolerance for quantity matching
+        
+    Returns:
+        bool: True if order matches target within tolerances
+    """
+    if not order:
+        return False
+    
+    # Get order price - check both regular price and stop price
+    order_price = float(order.get('stopPrice', 0) or order.get('price', 0) or 0)
+    order_qty = float(order.get('amount', 0) or order.get('remaining', 0) or 0)
+    
+    if order_price == 0 or order_qty == 0:
+        return False
+    
+    price_matches = approx_equal(order_price, float(target_price), price_tol)
+    qty_matches = approx_equal(order_qty, float(target_qty), qty_tol)
+    
+    logger.debug("order_matches_target: order_price=%s target_price=%s price_matches=%s, order_qty=%s target_qty=%s qty_matches=%s",
+                 order_price, target_price, price_matches, order_qty, target_qty, qty_matches)
+    
+    return price_matches and qty_matches
+
 
 def _validate_order_response(resp):
     """
@@ -350,13 +406,113 @@ class HyperliquidClient:
             return None
 
     def place_sl_tp_orders(self, symbol, side, amount, sl_price, tp_price):
-        """Place both Stop Loss and Take Profit orders together."""
+        """Place both Stop Loss and Take Profit orders together.
+        
+        This function is idempotent - it checks for existing matching orders
+        before placing new ones to prevent duplicates.
+        
+        Args:
+            symbol: Trading symbol
+            side: 'buy' or 'sell' (entry side, TP/SL will use opposite)
+            amount: Order quantity
+            sl_price: Stop loss price
+            tp_price: Take profit price
+            
+        Returns:
+            dict: {'sl_order': order or None, 'tp_order': order or None}
+        """
+        import state  # Import here to avoid circular imports
+        
         sl_tp_side = 'sell' if side == 'buy' else 'buy'
         
-        sl_order = self.place_stop_loss(symbol, sl_tp_side, amount, sl_price)
-        tp_order = self.place_take_profit(symbol, sl_tp_side, amount, tp_price)
+        # Check for existing matching orders first
+        existing_tp_sl = self.get_tp_sl_orders_for_position(symbol)
+        existing_sl = existing_tp_sl.get('sl_order')
+        existing_tp = existing_tp_sl.get('tp_order')
+        
+        sl_order = None
+        tp_order = None
+        
+        # Check if SL already exists and matches
+        if existing_sl and order_matches_target(existing_sl, sl_price, amount):
+            logger.info("Existing SL order matches target for %s, skipping placement", symbol)
+            sl_order = existing_sl
+            state.bot_state.metrics.duplicate_placement_attempts += 1
+        else:
+            # Cancel existing mismatched SL if present
+            if existing_sl:
+                old_sl_id = existing_sl.get('id')
+                logger.info("Existing SL order for %s does not match target, cancelling %s", symbol, old_sl_id)
+                self.cancel_order(symbol, old_sl_id)
+            sl_order = self.place_stop_loss(symbol, sl_tp_side, amount, sl_price)
+            # Update state immediately after successful order placement
+            if sl_order:
+                self._update_state_after_order(symbol, sl_order)
+        
+        # Check if TP already exists and matches
+        if existing_tp and order_matches_target(existing_tp, tp_price, amount):
+            logger.info("Existing TP order matches target for %s, skipping placement", symbol)
+            tp_order = existing_tp
+            state.bot_state.metrics.duplicate_placement_attempts += 1
+        else:
+            # Cancel existing mismatched TP if present
+            if existing_tp:
+                old_tp_id = existing_tp.get('id')
+                logger.info("Existing TP order for %s does not match target, cancelling %s", symbol, old_tp_id)
+                self.cancel_order(symbol, old_tp_id)
+            tp_order = self.place_take_profit(symbol, sl_tp_side, amount, tp_price)
+            # Update state immediately after successful order placement
+            if tp_order:
+                self._update_state_after_order(symbol, tp_order)
         
         return {'sl_order': sl_order, 'tp_order': tp_order}
+    
+    def _update_state_after_order(self, symbol, order):
+        """Update bot state immediately after a successful order placement.
+        
+        This prevents race conditions where subsequent reconciliation thinks
+        the order is missing and re-creates it.
+        
+        Args:
+            symbol: Trading symbol
+            order: Order response dict
+        """
+        import state  # Import here to avoid circular imports
+        
+        try:
+            # Refresh open orders for this symbol to ensure state is current
+            orders = self.get_open_orders(symbol)
+            
+            # Update exchange_open_orders in state
+            # Filter out orders for this symbol and add fresh ones
+            other_orders = [o for o in state.bot_state.exchange_open_orders 
+                          if o.get('symbol') != symbol]
+            
+            # Format new orders to match expected state format
+            formatted_orders = []
+            for o in orders:
+                formatted_order = {
+                    'order_id': o.get('id', ''),
+                    'symbol': o.get('symbol', ''),
+                    'type': o.get('type', ''),
+                    'side': o.get('side', '').upper(),
+                    'price': float(o.get('price', 0) or 0),
+                    'amount': float(o.get('amount', 0) or 0),
+                    'filled': float(o.get('filled', 0) or 0),
+                    'remaining': float(o.get('remaining', 0) or 0),
+                    'status': o.get('status', ''),
+                    'timestamp': o.get('datetime', ''),
+                    'reduce_only': o.get('reduceOnly', False),
+                    'stop_price': float(o.get('stopPrice', 0) or 0) if o.get('stopPrice') else None
+                }
+                formatted_orders.append(formatted_order)
+            
+            state.bot_state.exchange_open_orders = other_orders + formatted_orders
+            state.bot_state.metrics.open_exchange_orders_count = len(state.bot_state.exchange_open_orders)
+            
+            logger.debug("Updated state after order placement for %s", symbol)
+        except Exception as e:
+            logger.warning("Failed to update state after order placement for %s: %s", symbol, e)
 
     def get_open_orders(self, symbol=None):
         """Fetch open orders from the exchange.
