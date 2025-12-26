@@ -383,20 +383,23 @@ def update_pending_order_exchange_orders(symbol: str, sl_order: Dict = None, tp_
     if not pending:
         return
     exchange_orders = pending.get('exchange_orders') or {'sl': None, 'tp': None}
-    if sl_order:
-        if isinstance(sl_order, dict):
-            sl_id = sl_order.get('id') or sl_order.get('order_id') or sl_order.get('clientOrderId')
-        else:
-            sl_id = sl_order
-        if sl_id:
-            exchange_orders['sl'] = sl_id
-    if tp_order:
-        if isinstance(tp_order, dict):
-            tp_id = tp_order.get('id') or tp_order.get('order_id') or tp_order.get('clientOrderId')
-        else:
-            tp_id = tp_order
-        if tp_id:
-            exchange_orders['tp'] = tp_id
+    def _extract_order_id(order_obj):
+        if not order_obj:
+            return None
+        if isinstance(order_obj, dict):
+            return (
+                order_obj.get('id')
+                or order_obj.get('order_id')
+                or order_obj.get('clientOrderId')
+            )
+        return order_obj
+
+    sl_id = _extract_order_id(sl_order)
+    tp_id = _extract_order_id(tp_order)
+    if sl_id:
+        exchange_orders['sl'] = sl_id
+    if tp_id:
+        exchange_orders['tp'] = tp_id
     pending['exchange_orders'] = exchange_orders
     pending['last_tp_sl_placement'] = datetime.datetime.now().isoformat()
     bot_state.pending_orders[symbol] = pending
