@@ -344,11 +344,14 @@ def add_pending_order(symbol: str, order_id: str, params: Dict):
     
     Stores created_at timestamp for stale order detection.
     """
+    now = datetime.datetime.now().isoformat()
     bot_state.pending_orders[symbol] = {
         'order_id': order_id,
         'params': params,
-        'timestamp': datetime.datetime.now().isoformat(),
-        'created_at': datetime.datetime.now().isoformat()  # For stale detection
+        'timestamp': now,
+        'created_at': now,  # For stale detection
+        'exchange_orders': {'sl': None, 'tp': None},
+        'last_tp_sl_placement': None
     }
     bot_state.metrics.pending_orders_count = len(bot_state.pending_orders)
     save_pending_orders()
@@ -364,7 +367,43 @@ def remove_pending_order(symbol: str):
 
 def get_pending_order(symbol: str):
     """Get pending order info for a symbol"""
-    return bot_state.pending_orders.get(symbol)
+    pending = bot_state.pending_orders.get(symbol)
+    if pending is None:
+        return None
+    # Backfill new fields for existing persisted data
+    if 'exchange_orders' not in pending:
+        pending['exchange_orders'] = {'sl': None, 'tp': None}
+    if 'last_tp_sl_placement' not in pending:
+        pending['last_tp_sl_placement'] = None
+    return pending
+
+def update_pending_order_exchange_orders(symbol: str, sl_order: Dict = None, tp_order: Dict = None):
+    """Store exchange TP/SL order ids on the pending order and persist to disk."""
+    pending = bot_state.pending_orders.get(symbol)
+    if not pending:
+        return
+    exchange_orders = pending.get('exchange_orders') or {'sl': None, 'tp': None}
+    def _extract_order_id(order_obj):
+        if not order_obj:
+            return None
+        if isinstance(order_obj, dict):
+            return (
+                order_obj.get('id')
+                or order_obj.get('order_id')
+                or order_obj.get('clientOrderId')
+            )
+        return order_obj
+
+    sl_id = _extract_order_id(sl_order)
+    tp_id = _extract_order_id(tp_order)
+    if sl_id:
+        exchange_orders['sl'] = sl_id
+    if tp_id:
+        exchange_orders['tp'] = tp_id
+    pending['exchange_orders'] = exchange_orders
+    pending['last_tp_sl_placement'] = datetime.datetime.now().isoformat()
+    bot_state.pending_orders[symbol] = pending
+    save_pending_orders()
 
 def get_stale_pending_orders(stale_threshold_seconds: int) -> Dict[str, Dict]:
     """Get all pending orders that are older than the threshold.
@@ -479,6 +518,13 @@ def load_pending_orders_on_startup():
         if os.path.exists(PENDING_ORDERS_FILE):
             with open(PENDING_ORDERS_FILE, 'r') as f:
                 loaded = json.load(f)
+                # Backfill defaults for older persisted structures
+                for symbol, pending in loaded.items():
+                    if 'exchange_orders' not in pending:
+                        pending['exchange_orders'] = {'sl': None, 'tp': None}
+                    if 'last_tp_sl_placement' not in pending:
+                        pending['last_tp_sl_placement'] = None
+                    loaded[symbol] = pending
                 bot_state.pending_orders = loaded
                 bot_state.metrics.pending_orders_count = len(loaded)
                 print(f"Loaded {len(loaded)} pending orders from disk")

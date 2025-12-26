@@ -123,7 +123,54 @@ class TestIdempotentTPSLPlacement(unittest.TestCase):
         
         # Verify create_order was NOT called (orders already exist)
         mock_exchange.create_order.assert_not_called()
-    
+
+    @patch('execution.ccxt.hyperliquid')
+    def test_state_cached_reduce_only_prevents_duplicate(self, mock_hyperliquid):
+        """Reduce-only orders in cached state should prevent duplicate placement when API lags"""
+        from execution import HyperliquidClient
+
+        mock_exchange = Mock()
+        mock_hyperliquid.return_value = mock_exchange
+
+        # Simulate API returning no orders while state cache still has them
+        mock_exchange.fetch_open_orders.return_value = []
+
+        # Seed state cache with matching reduce-only orders
+        state.bot_state.exchange_open_orders = [
+            {
+                'order_id': 'state_sl',
+                'symbol': 'BTC/USDC',
+                'type': 'STOP_MARKET',
+                'price': 43000.0,
+                'stop_price': 43000.0,
+                'amount': 0.1,
+                'reduce_only': True
+            },
+            {
+                'order_id': 'state_tp',
+                'symbol': 'BTC/USDC',
+                'type': 'TAKE_PROFIT_MARKET',
+                'price': 49000.0,
+                'stop_price': 49000.0,
+                'amount': 0.1,
+                'reduce_only': True
+            }
+        ]
+
+        client = HyperliquidClient()
+        initial_duplicates = state.bot_state.metrics.duplicate_placement_attempts
+
+        result = client.place_sl_tp_orders('BTC/USDC', 'buy', 0.1, 43000.0, 49000.0)
+
+        # Should reuse cached orders and avoid new placement
+        mock_exchange.create_order.assert_not_called()
+        self.assertEqual(result['sl_order']['id'], 'state_sl')
+        self.assertEqual(result['tp_order']['id'], 'state_tp')
+        self.assertEqual(
+            state.bot_state.metrics.duplicate_placement_attempts,
+            initial_duplicates + 2
+        )
+
     @patch('execution.ccxt.hyperliquid')
     def test_mismatched_order_replaced(self, mock_hyperliquid):
         """Existing order with different price should be cancelled and replaced"""

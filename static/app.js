@@ -543,6 +543,13 @@ async function updatePendingOrders() {
                 const params = order.params || {};
                 const orderId = order.order_id || '';
                 botTrackedOrderIds.add(orderId);
+                const exchangeOrders = order.exchange_orders || {};
+                if (exchangeOrders.sl) {
+                    botTrackedOrderIds.add(exchangeOrders.sl);
+                }
+                if (exchangeOrders.tp) {
+                    botTrackedOrderIds.add(exchangeOrders.tp);
+                }
                 allOrders.push({
                     symbol: symbol,
                     side: (params.side || '').toUpperCase(),
