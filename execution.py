@@ -1,5 +1,8 @@
 import ccxt
+import logging
 import config
+
+logger = logging.getLogger(__name__)
 
 class BinanceClient:
     def __init__(self):
@@ -13,6 +16,33 @@ class BinanceClient:
         if config.BINANCE_TESTNET:
             self.exchange.set_sandbox_mode(True)
             print("Binance Testnet Enabled")
+        else:
+            # Explicitly log the market type in use to catch spot/futures mixups
+            try:
+                default_type = self.exchange.options.get('defaultType')
+                print(f"Binance client initialized with defaultType={default_type}")
+            except Exception:
+                pass
+
+    @staticmethod
+    def _extract_position_meta(position, side_value):
+        """Return signed position size and normalized side based on exchange position or close side hint."""
+        pos_size_local = None
+        pos_side_local = None
+        if position:
+            raw_size = float(position.get('contracts', position.get('positionAmt', position.get('size', 0))) or 0)
+            raw_side_local = position.get('side') or ('short' if raw_size < 0 else 'long')
+            pos_side_local = raw_side_local.lower()
+            pos_size_local = -abs(raw_size) if pos_side_local == 'short' else abs(raw_size)
+        else:
+            inferred = str(side_value).lower()
+            if inferred == 'sell':
+                pos_side_local = 'long'
+            elif inferred == 'buy':
+                pos_side_local = 'short'
+            else:
+                raise ValueError(f"Unknown close side hint: {side_value}")
+        return pos_size_local, pos_side_local
 
     def _resolve_symbol(self, symbol: str) -> str:
         """Resolve a configured symbol to the exact market symbol loaded by ccxt."""
@@ -28,6 +58,9 @@ class BinanceClient:
                     if resolved != symbol:
                         print(f"Resolved symbol {symbol} -> {resolved}")
                     return resolved
+            # Log a sample of markets to help diagnose missing symbols (e.g., MATIC/SHIB)
+            sample_keys = list(markets.keys())[:5]
+            print(f"Unable to directly resolve {symbol}. Sample markets: {sample_keys}")
         except Exception as e:
             print(f"Warning: could not resolve symbol {symbol}: {e}")
         return symbol
@@ -300,6 +333,48 @@ class BinanceClient:
             return any('reduceonly' in s or 'reduce only' in s or 'reduce_only' in s for s in indicators if s)
 
         try:
+            # Fetch latest position if not provided for safety checks
+            try:
+                position = self.get_position(symbol)
+            except ccxt.BaseError as exc:
+                logger.error("Failed to fetch position for safety check", extra={"symbol": symbol, "error": str(exc)})
+                position = None
+
+            pos_size, pos_side = self._extract_position_meta(position, side)
+
+            expected_close_side = 'buy' if pos_side == 'short' else 'sell'
+            amount_to_close = abs(pos_size) if pos_size is not None else abs(amount)
+
+            # Pre-order safety logging
+            logger.debug("Pre-order safety validation", extra={
+                "symbol": symbol,
+                "pos_size": pos_size,
+                "pos_side": pos_side,
+                "expected_close_side": expected_close_side,
+                "amount": amount_to_close
+            })
+
+            if pos_size is not None:
+                # Calculate resulting position: buys add to size, sells subtract; direction depends on existing sign
+                hypo = pos_size + (amount_to_close if expected_close_side == 'buy' else -amount_to_close)
+                reduce_ok = abs(hypo) < abs(pos_size) or hypo == 0
+                if not reduce_ok:
+                    logger.error(
+                        "Aborting: order WOULD NOT reduce position",
+                        extra={
+                            "hypothetical_pos": hypo,
+                            "pos_size": pos_size,
+                            "side": expected_close_side,
+                            "amount": amount_to_close,
+                            "symbol": symbol
+                        }
+                    )
+                    raise RuntimeError(
+                        f"Refusing to place order that does not reduce position (hypo={hypo}, current={pos_size}, side={expected_close_side}, amt={amount_to_close})"
+                    )
+
+            side = expected_close_side
+            amount = amount_to_close
             # Create a MARKET order with reduceOnly=True
             params = {'reduceOnly': True}
             resolved_symbol = self._resolve_symbol(symbol)
