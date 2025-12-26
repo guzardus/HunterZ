@@ -66,16 +66,18 @@ def order_matches_target(order, target_price, target_qty, price_tol=PRICE_TOLERA
     return price_matches and qty_matches
 
 
-def _find_matching_reduce_only_from_state(symbol, target_price, target_qty):
+def _find_matching_reduce_only_from_state(symbol, target_price, target_qty, orders=None):
     """
     Check the cached exchange_open_orders in state for a matching reduce-only order.
     This helps avoid duplicate placements when the exchange API response lags.
     """
     import state  # Local import to avoid circular dependency
 
-    for order in state.bot_state.exchange_open_orders:
-        if order.get('symbol') != symbol or not order.get('reduce_only'):
-            continue
+    cached_orders = orders
+    if cached_orders is None:
+        cached_orders = state.bot_state.exchange_open_orders
+
+    for order in cached_orders:
         mapped_order = {
             'id': order.get('order_id') or order.get('id'),
             'stopPrice': order.get('stop_price') or order.get('price'),
@@ -452,12 +454,19 @@ class HyperliquidClient:
         existing_tp = existing_tp_sl.get('tp_order')
 
         # Use cached exchange_open_orders as a secondary source to avoid duplicates when API lags
+        state_reduce_orders = None
+        if not existing_sl or not existing_tp:
+            import state  # Local import to avoid circular imports
+            state_reduce_orders = [
+                o for o in state.bot_state.exchange_open_orders
+                if o.get('symbol') == symbol and o.get('reduce_only')
+            ]
         if not existing_sl:
-            state_match_sl = _find_matching_reduce_only_from_state(symbol, sl_price, amount)
+            state_match_sl = _find_matching_reduce_only_from_state(symbol, sl_price, amount, state_reduce_orders)
             if state_match_sl:
                 existing_sl = state_match_sl
         if not existing_tp:
-            state_match_tp = _find_matching_reduce_only_from_state(symbol, tp_price, amount)
+            state_match_tp = _find_matching_reduce_only_from_state(symbol, tp_price, amount, state_reduce_orders)
             if state_match_tp:
                 existing_tp = state_match_tp
         
