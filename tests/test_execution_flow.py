@@ -64,7 +64,8 @@ class TestTPSLExecutionFlow(unittest.TestCase):
         self.assertEqual(sl_call[0][1], 'STOP_MARKET')
         self.assertEqual(sl_call[0][2], 'sell')
         self.assertEqual(sl_call[0][3], 0.1)
-        self.assertEqual(sl_call[1]['params']['stopPrice'], 43000.0)
+        self.assertEqual(sl_call[0][4], 43000.0)  # price parameter
+        self.assertEqual(sl_call[1]['params']['stopLossPrice'], 43000.0)
         self.assertTrue(sl_call[1]['params']['reduceOnly'])
         
         # Check TP order call
@@ -73,7 +74,8 @@ class TestTPSLExecutionFlow(unittest.TestCase):
         self.assertEqual(tp_call[0][1], 'TAKE_PROFIT_MARKET')
         self.assertEqual(tp_call[0][2], 'sell')
         self.assertEqual(tp_call[0][3], 0.1)
-        self.assertEqual(tp_call[1]['params']['stopPrice'], 49000.0)
+        self.assertEqual(tp_call[0][4], 49000.0)  # price parameter
+        self.assertEqual(tp_call[1]['params']['takeProfitPrice'], 49000.0)
         self.assertTrue(tp_call[1]['params']['reduceOnly'])
     
     @patch('execution.ccxt.hyperliquid')
