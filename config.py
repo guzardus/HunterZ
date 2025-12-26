@@ -24,6 +24,7 @@ POSITION_RECONCILIATION_INTERVAL = 600  # 10 minutes in seconds
 # Active Position Monitoring
 ENABLE_ACTIVE_TP_SL_MONITORING = True  # Set to False to rely only on Binance conditional orders
 FORCED_CLOSURE_RATE_LIMIT_DELAY = 0.5  # Delay in seconds between forced closures to avoid rate limits
+PENDING_ORDER_STALE_SECONDS = 900  # Cancel and replace pending orders older than 15 minutes
 
 # Symbol filtering
 TRADING_PAIRS = [

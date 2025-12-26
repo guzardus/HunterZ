@@ -746,7 +746,7 @@ def run_bot_logic():
                                     if parsed_ts.tzinfo is None:
                                         parsed_ts = parsed_ts.replace(tzinfo=datetime.timezone.utc)
                                     age_seconds = (now_ts - parsed_ts).total_seconds()
-                                    if age_seconds > 900:  # 15 minutes
+                                    if age_seconds > config.PENDING_ORDER_STALE_SECONDS:
                                         print(f"Pending order {pending['order_id']} for {symbol} stale ({age_seconds:.0f}s), attempting cancel and replace")
                                         client.cancel_order(symbol, pending['order_id'])
                                         state.remove_pending_order(symbol)

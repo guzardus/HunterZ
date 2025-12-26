@@ -289,6 +289,16 @@ class BinanceClient:
         Returns:
             order: Market order result or None
         """
+        def _is_reduce_only_rejection(error):
+            code = getattr(error, 'code', None) or getattr(error, 'errorCode', None)
+            if code in (-2022, -2021):
+                return True
+            text = str(error).lower()
+            body = getattr(error, 'body', '') or ''
+            body = body.lower() if hasattr(body, 'lower') else ''
+            indicators = (text, body)
+            return any('reduceonly' in s or 'reduce only' in s or 'reduce_only' in s for s in indicators if s)
+
         try:
             # Create a MARKET order with reduceOnly=True
             params = {'reduceOnly': True}
@@ -299,7 +309,7 @@ class BinanceClient:
                 'side': side,
                 'amount': amount,
                 'params': params,
-                'reason': reason
+                'log_reason': reason
             }
             if config.BINANCE_TESTNET:
                 print(f"Close attempt payload: {payload}")
@@ -309,7 +319,7 @@ class BinanceClient:
                 return order
             except Exception as inner:
                 print(f"Primary close failed for {resolved_symbol}: {inner}.")
-                if 'reduce' not in str(inner).lower():
+                if not _is_reduce_only_rejection(inner):
                     return None
                 print("Retrying without reduceOnly...")
                 fallback_params = {}
