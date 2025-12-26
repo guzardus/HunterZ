@@ -1,5 +1,58 @@
 import ccxt
 import config
+import logging
+import time
+
+logger = logging.getLogger(__name__)
+
+# Retry configuration for order placement
+MAX_ORDER_RETRIES = 3
+RETRY_BACKOFF_SECONDS = [0.5, 1.0, 2.0]
+
+
+def _validate_order_response(resp):
+    """
+    Ensure the order response contains at least one valid ID field.
+    Returns the response dict if valid, None if invalid or missing ID.
+    
+    Args:
+        resp: Order response from exchange
+        
+    Returns:
+        dict: The full response if valid, None if invalid/missing ID
+        
+    Note:
+        An order ID is considered valid if it is truthy (non-None, non-empty, non-zero).
+        This handles the common case where exchanges return None or empty string for failed orders.
+    """
+    if not resp:
+        return None
+    # common ID fields used across exchanges
+    order_id = None
+    if isinstance(resp, dict):
+        order_id = resp.get('id') or resp.get('orderId') or resp.get('client_order_id') or resp.get('clientOrderId')
+    if not order_id:
+        return None
+    return resp
+
+
+def _is_transient_error(error):
+    """
+    Check if an error is transient and worth retrying.
+    
+    Args:
+        error: The exception to check
+        
+    Returns:
+        bool: True if the error is transient, False otherwise
+    """
+    transient_indicators = [
+        'timeout', 'network', 'connection', 'temporary',
+        'rate limit', 'too many requests', '429', '503', '504'
+    ]
+    error_str = str(error).lower()
+    return any(indicator in error_str for indicator in transient_indicators)
+
 
 class HyperliquidClient:
     def __init__(self):
@@ -139,35 +192,145 @@ class HyperliquidClient:
             return False
 
     def place_limit_order(self, symbol, side, amount, price):
-        try:
-            order = self.exchange.create_order(symbol, 'limit', side, amount, price)
-            print(f"Placed {side} limit order for {symbol} at {price}")
-            return order
-        except Exception as e:
-            print(f"Error placing limit order for {symbol}: {e}")
-            return None
+        """Place a limit order with validation, logging, and retries.
+        
+        Args:
+            symbol: Trading symbol
+            side: 'buy' or 'sell'
+            amount: Order quantity
+            price: Limit price
+            
+        Returns:
+            dict: Order response if successful, None otherwise
+        """
+        payload = {
+            'symbol': symbol,
+            'type': 'limit',
+            'side': side,
+            'amount': amount,
+            'price': price
+        }
+        
+        for attempt in range(MAX_ORDER_RETRIES):
+            try:
+                order = self.exchange.create_order(symbol, 'limit', side, amount, price)
+                logger.debug("create_order payload=%s response=%s", payload, order)
+                
+                validated = _validate_order_response(order)
+                if validated:
+                    print(f"Placed {side} limit order for {symbol} at {price}")
+                    return validated
+                else:
+                    logger.error("Limit order response invalid/missing id. Response: %s", order)
+                    # Retry on None response
+                    if attempt < MAX_ORDER_RETRIES - 1:
+                        time.sleep(RETRY_BACKOFF_SECONDS[attempt])
+                        continue
+                    return None
+                    
+            except Exception as e:
+                logger.debug("create_order attempt %d failed: payload=%s error=%s", attempt + 1, payload, e)
+                if _is_transient_error(e) and attempt < MAX_ORDER_RETRIES - 1:
+                    time.sleep(RETRY_BACKOFF_SECONDS[attempt])
+                    continue
+                print(f"Error placing limit order for {symbol}: {e}")
+                return None
+        
+        return None
 
     def place_stop_loss(self, symbol, side, amount, stop_price):
-        try:
-            # STOP_MARKET for Futures
-            params = {'stopPrice': stop_price, 'reduceOnly': True}
-            order = self.exchange.create_order(symbol, 'STOP_MARKET', side, amount, params=params)
-            print(f"Placed Stop Loss for {symbol} at {stop_price}")
-            return order
-        except Exception as e:
-            print(f"Error placing SL for {symbol}: {e}")
-            return None
+        """Place a stop loss order with validation, logging, and retries.
+        
+        Args:
+            symbol: Trading symbol
+            side: 'buy' or 'sell' (close side)
+            amount: Order quantity
+            stop_price: Stop trigger price
+            
+        Returns:
+            dict: Order response if successful, None otherwise
+        """
+        params = {'stopPrice': stop_price, 'reduceOnly': True}
+        payload = {
+            'symbol': symbol,
+            'type': 'STOP_MARKET',
+            'side': side,
+            'amount': amount,
+            'params': params
+        }
+        
+        for attempt in range(MAX_ORDER_RETRIES):
+            try:
+                order = self.exchange.create_order(symbol, 'STOP_MARKET', side, amount, params=params)
+                logger.debug("create_order payload=%s response=%s", payload, order)
+                
+                validated = _validate_order_response(order)
+                if validated:
+                    print(f"Placed Stop Loss for {symbol} at {stop_price}")
+                    return validated
+                else:
+                    logger.error("SL order response invalid/missing id. Response: %s", order)
+                    if attempt < MAX_ORDER_RETRIES - 1:
+                        time.sleep(RETRY_BACKOFF_SECONDS[attempt])
+                        continue
+                    return None
+                    
+            except Exception as e:
+                logger.debug("create_order SL attempt %d failed: payload=%s error=%s", attempt + 1, payload, e)
+                if _is_transient_error(e) and attempt < MAX_ORDER_RETRIES - 1:
+                    time.sleep(RETRY_BACKOFF_SECONDS[attempt])
+                    continue
+                print(f"Error placing SL for {symbol}: {e}")
+                return None
+        
+        return None
 
     def place_take_profit(self, symbol, side, amount, tp_price):
-        try:
-            # TAKE_PROFIT_MARKET for Futures
-            params = {'stopPrice': tp_price, 'reduceOnly': True}
-            order = self.exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', side, amount, params=params)
-            print(f"Placed Take Profit for {symbol} at {tp_price}")
-            return order
-        except Exception as e:
-            print(f"Error placing TP for {symbol}: {e}")
-            return None
+        """Place a take profit order with validation, logging, and retries.
+        
+        Args:
+            symbol: Trading symbol
+            side: 'buy' or 'sell' (close side)
+            amount: Order quantity
+            tp_price: Take profit trigger price
+            
+        Returns:
+            dict: Order response if successful, None otherwise
+        """
+        params = {'stopPrice': tp_price, 'reduceOnly': True}
+        payload = {
+            'symbol': symbol,
+            'type': 'TAKE_PROFIT_MARKET',
+            'side': side,
+            'amount': amount,
+            'params': params
+        }
+        
+        for attempt in range(MAX_ORDER_RETRIES):
+            try:
+                order = self.exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', side, amount, params=params)
+                logger.debug("create_order payload=%s response=%s", payload, order)
+                
+                validated = _validate_order_response(order)
+                if validated:
+                    print(f"Placed Take Profit for {symbol} at {tp_price}")
+                    return validated
+                else:
+                    logger.error("TP order response invalid/missing id. Response: %s", order)
+                    if attempt < MAX_ORDER_RETRIES - 1:
+                        time.sleep(RETRY_BACKOFF_SECONDS[attempt])
+                        continue
+                    return None
+                    
+            except Exception as e:
+                logger.debug("create_order TP attempt %d failed: payload=%s error=%s", attempt + 1, payload, e)
+                if _is_transient_error(e) and attempt < MAX_ORDER_RETRIES - 1:
+                    time.sleep(RETRY_BACKOFF_SECONDS[attempt])
+                    continue
+                print(f"Error placing TP for {symbol}: {e}")
+                return None
+        
+        return None
 
     def get_order_status(self, symbol, order_id):
         """Check the status of an order."""
@@ -266,12 +429,38 @@ class HyperliquidClient:
         Returns:
             order: Market order result or None
         """
-        try:
-            # Create a MARKET order with reduceOnly=True
-            params = {'reduceOnly': True}
-            order = self.exchange.create_order(symbol, 'market', side, amount, params=params)
-            print(f"⚠️ FORCED CLOSURE ({reason}): Closed {amount} {symbol} position with market {side} order")
-            return order
-        except Exception as e:
-            print(f"Error closing position for {symbol} with market order: {e}")
-            return None
+        params = {'reduceOnly': True}
+        payload = {
+            'symbol': symbol,
+            'type': 'market',
+            'side': side,
+            'amount': amount,
+            'params': params,
+            'reason': reason
+        }
+        
+        for attempt in range(MAX_ORDER_RETRIES):
+            try:
+                order = self.exchange.create_order(symbol, 'market', side, amount, params=params)
+                logger.debug("create_order payload=%s response=%s", payload, order)
+                
+                validated = _validate_order_response(order)
+                if validated:
+                    print(f"⚠️ FORCED CLOSURE ({reason}): Closed {amount} {symbol} position with market {side} order")
+                    return validated
+                else:
+                    logger.error("Market order response invalid/missing id. Response: %s", order)
+                    if attempt < MAX_ORDER_RETRIES - 1:
+                        time.sleep(RETRY_BACKOFF_SECONDS[attempt])
+                        continue
+                    return None
+                    
+            except Exception as e:
+                logger.debug("create_order market attempt %d failed: payload=%s error=%s", attempt + 1, payload, e)
+                if _is_transient_error(e) and attempt < MAX_ORDER_RETRIES - 1:
+                    time.sleep(RETRY_BACKOFF_SECONDS[attempt])
+                    continue
+                print(f"Error closing position for {symbol} with market order: {e}")
+                return None
+        
+        return None
