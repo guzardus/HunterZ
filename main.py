@@ -741,7 +741,7 @@ def run_bot_logic():
                             pending_ts = pending.get('timestamp')
                             try:
                                 if pending_ts:
-                                    now_ts = datetime.datetime.now(datetime.timezone.utc)
+                                    now_ts = datetime.datetime.now(tz=datetime.timezone.utc)
                                     parsed_ts = datetime.datetime.fromisoformat(pending_ts)
                                     if parsed_ts.tzinfo is None:
                                         parsed_ts = parsed_ts.replace(tzinfo=datetime.timezone.utc)

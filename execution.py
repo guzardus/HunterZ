@@ -146,7 +146,8 @@ class BinanceClient:
         try:
             resolved_symbol = self._resolve_symbol(symbol)
             payload = {'symbol': resolved_symbol, 'type': 'limit', 'side': side, 'amount': amount, 'price': price}
-            print(f"Placing limit order payload: {payload}")
+            if config.BINANCE_TESTNET:
+                print(f"Placing limit order payload: {payload}")
             order = self.exchange.create_order(resolved_symbol, 'limit', side, amount, price)
             print(f"Placed {side} limit order for {symbol} at {price}")
             return order
@@ -160,7 +161,8 @@ class BinanceClient:
             # STOP_MARKET for Futures
             params = {'stopPrice': stop_price, 'reduceOnly': True}
             payload = {'symbol': resolved_symbol, 'side': side, 'amount': amount, 'params': params}
-            print(f"Placing Stop Loss payload: {payload}")
+            if config.BINANCE_TESTNET:
+                print(f"Placing Stop Loss payload: {payload}")
             order = self.exchange.create_order(resolved_symbol, 'STOP_MARKET', side, amount, params=params)
             print(f"Placed Stop Loss for {resolved_symbol} at {stop_price}")
             return order
@@ -174,7 +176,8 @@ class BinanceClient:
             # TAKE_PROFIT_MARKET for Futures
             params = {'stopPrice': tp_price, 'reduceOnly': True}
             payload = {'symbol': resolved_symbol, 'side': side, 'amount': amount, 'params': params}
-            print(f"Placing Take Profit payload: {payload}")
+            if config.BINANCE_TESTNET:
+                print(f"Placing Take Profit payload: {payload}")
             order = self.exchange.create_order(resolved_symbol, 'TAKE_PROFIT_MARKET', side, amount, params=params)
             print(f"Placed Take Profit for {resolved_symbol} at {tp_price}")
             return order
@@ -298,13 +301,17 @@ class BinanceClient:
                 'params': params,
                 'reason': reason
             }
-            print(f"Close attempt payload: {payload}")
+            if config.BINANCE_TESTNET:
+                print(f"Close attempt payload: {payload}")
             try:
                 order = self.exchange.create_order(resolved_symbol, 'market', side, amount, params=params)
                 print(f"⚠️ FORCED CLOSURE ({reason}): Closed {amount} {resolved_symbol} position with market {side} order")
                 return order
             except Exception as inner:
-                print(f"Primary close failed for {resolved_symbol}: {inner}. Retrying without reduceOnly...")
+                print(f"Primary close failed for {resolved_symbol}: {inner}.")
+                if 'reduce' not in str(inner).lower():
+                    return None
+                print("Retrying without reduceOnly...")
                 fallback_params = {}
                 order = self.exchange.create_order(resolved_symbol, 'market', side, amount, params=fallback_params)
                 print(f"⚠️ FORCED CLOSURE ({reason}) without reduceOnly: Closed {amount} {resolved_symbol} with market {side}")
