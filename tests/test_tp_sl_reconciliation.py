@@ -225,6 +225,7 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
         position = {
             "symbol": "SOL/USDT",
             "side": "SHORT",
+            # Positive position size with explicit SHORT side mimics hedged-mode payloads
             "positionAmt": 112.0,
             "entryPrice": 124.28,
         }
@@ -233,10 +234,7 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
 
         self.assertTrue(success)
         mock_safe_place.assert_called_once()
-        called_args = mock_safe_place.call_args[0]
-        is_long_arg = called_args[2]
-        tp_price = called_args[4]
-        sl_price = called_args[5]
+        _, _, is_long_arg, _, tp_price, sl_price = mock_safe_place.call_args[0]
 
         self.assertFalse(is_long_arg)
         self.assertLess(tp_price, position["entryPrice"])

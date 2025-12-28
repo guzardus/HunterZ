@@ -422,7 +422,7 @@ def reconcile_existing_positions_with_trades(client):
                 except (ValueError, TypeError) as e:
                     print(f"WARNING: Invalid position data for {symbol}: {e}")
                     continue
-                side = 'LONG' if position_amount > 0 else 'SHORT'
+                side = get_position_side(position)
                 
                 print(f"Creating trade entry for existing position: {symbol} {side}")
                 
