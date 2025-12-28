@@ -3,9 +3,11 @@ import time
 import datetime
 from datetime import timezone
 from decimal import Decimal, ROUND_HALF_UP
+import logging
 import config
 import state
 
+logger = logging.getLogger(__name__)
 
 # Log throttling state: {(category, symbol): {"last_logged": datetime, "count": int}}
 _log_throttle_state = {}
@@ -117,7 +119,7 @@ def log_tp_sl_inconsistent_throttled(symbol, side, entry_price, tp, sl):
         msg = f"⚠️ Skipping closure for {symbol}: TP/SL inconsistent for {side} (entry {entry_price}, TP {tp}, SL {sl})"
         if suppressed > 0:
             msg += f" [repeated {suppressed} times in last {LOG_THROTTLE_INTERVAL_SECONDS}s]"
-        print(msg)
+        logger.warning(msg)
 
 
 def log_pending_order_active_throttled(order_id, symbol):
@@ -131,7 +133,7 @@ def log_pending_order_active_throttled(order_id, symbol):
         msg = f"Pending order {order_id} still active for {symbol}, skipping new placement"
         if suppressed > 0:
             msg += f" [repeated {suppressed} times in last {LOG_THROTTLE_INTERVAL_SECONDS}s]"
-        print(msg)
+        logger.info(msg)
 
 
 def fetch_mark_price(client, symbol):

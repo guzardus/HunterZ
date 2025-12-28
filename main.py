@@ -582,19 +582,30 @@ def monitor_and_close_positions(client):
                 # Use tick-tolerant comparisons to avoid false positives from rounding differences
                 tick_size = order_utils.fetch_symbol_tick_size(client, symbol)
                 
+                def is_price_on_wrong_side(price, ref_price, should_be_above):
+                    """Check if price is on the wrong side of reference, accounting for tick tolerance."""
+                    if not price:
+                        return False
+                    # If prices are effectively equal (within tolerance), they're not invalid
+                    if order_utils.prices_are_equal(price, ref_price, tick_size):
+                        return False
+                    # Check if price is on wrong side
+                    if should_be_above:
+                        return price <= ref_price  # Should be above but isn't
+                    else:
+                        return price >= ref_price  # Should be below but isn't
+                
                 if side == 'LONG':
                     # For LONG: TP should be above entry, SL should be below entry
-                    # Using tick-tolerant check: TP <= entry is invalid, SL >= entry is invalid
-                    tp_invalid = take_profit and not order_utils.prices_are_equal(take_profit, entry_price, tick_size) and take_profit <= entry_price
-                    sl_invalid = stop_loss and not order_utils.prices_are_equal(stop_loss, entry_price, tick_size) and stop_loss >= entry_price
+                    tp_invalid = is_price_on_wrong_side(take_profit, entry_price, should_be_above=True)
+                    sl_invalid = is_price_on_wrong_side(stop_loss, entry_price, should_be_above=False)
                     if tp_invalid or sl_invalid:
                         log_tp_sl_inconsistent(position, entry_price, take_profit, stop_loss)
                         continue
                 elif side == 'SHORT':
                     # For SHORT: TP should be below entry, SL should be above entry
-                    # Using tick-tolerant check: TP >= entry is invalid, SL <= entry is invalid
-                    tp_invalid = take_profit and not order_utils.prices_are_equal(take_profit, entry_price, tick_size) and take_profit >= entry_price
-                    sl_invalid = stop_loss and not order_utils.prices_are_equal(stop_loss, entry_price, tick_size) and stop_loss <= entry_price
+                    tp_invalid = is_price_on_wrong_side(take_profit, entry_price, should_be_above=False)
+                    sl_invalid = is_price_on_wrong_side(stop_loss, entry_price, should_be_above=True)
                     if tp_invalid or sl_invalid:
                         log_tp_sl_inconsistent(position, entry_price, take_profit, stop_loss)
                         continue
