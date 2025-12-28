@@ -258,8 +258,8 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
             return True  # No position, nothing to reconcile
         
         position_size = abs(position_amount)
-        is_long = position_amount > 0
-        side = 'LONG' if is_long else 'SHORT'
+        side = get_position_side(position)
+        is_long = side == 'LONG'
         entry_price = float(position.get('entryPrice', 0) or 0)
         
         print(f"\n--- Reconciling TP/SL for {symbol} ({side}) ---")
