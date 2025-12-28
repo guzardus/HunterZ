@@ -20,6 +20,9 @@ RISK_PER_TRADE = 1.0  # 1% of balance
 # Reconciliation Settings
 TP_SL_QUANTITY_TOLERANCE = 0.01  # 1% tolerance for quantity matching
 POSITION_RECONCILIATION_INTERVAL = 600  # 10 minutes in seconds
+TP_SL_BUFFER_TICKS = int(os.getenv("TP_SL_BUFFER_TICKS", 1))
+TP_SL_PENDING_BACKOFF_SECONDS = int(os.getenv("TP_SL_PENDING_BACKOFF_SECONDS", 60))
+TP_SL_FALLBACK_MODE = os.getenv("TP_SL_FALLBACK_MODE", "MARKET_REDUCE")
 
 # Active Position Monitoring
 ENABLE_ACTIVE_TP_SL_MONITORING = True  # Set to False to rely only on Binance conditional orders
