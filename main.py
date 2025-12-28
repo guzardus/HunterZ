@@ -544,8 +544,8 @@ def monitor_and_close_positions(client):
                 stop_loss = position.get('stop_loss')
                 entry_price = position.get('entry_price', 0)
                 
-                # Skip if position size is 0 or invalid data
-                if size <= 0 or mark_price <= 0:
+                # Skip zero-size positions or invalid mark prices; negative sizes proceed for SHORT detection
+                if size == 0 or mark_price <= 0:
                     continue
                 
                 # Skip if no TP/SL values are available
@@ -597,8 +597,9 @@ def monitor_and_close_positions(client):
                     # Determine close side (opposite of position)
                     close_side = 'sell' if side == 'LONG' else 'buy'
                     
+                    size_to_close = abs(size)
                     # Format size with proper precision
-                    formatted_size = float(client.exchange.amount_to_precision(symbol, size))
+                    formatted_size = float(client.exchange.amount_to_precision(symbol, size_to_close))
                     
                     # Cancel existing TP/SL orders first
                     tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
@@ -616,9 +617,9 @@ def monitor_and_close_positions(client):
                     if market_order:
                         # Calculate PnL for logging
                         if side == 'LONG':
-                            pnl = (mark_price - entry_price) * size
+                            pnl = (mark_price - entry_price) * size_to_close
                         else:
-                            pnl = (entry_price - mark_price) * size
+                            pnl = (entry_price - mark_price) * size_to_close
                         
                         # Log the forced closure
                         state.add_forced_closure_log(symbol, close_reason, {
