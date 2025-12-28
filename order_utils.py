@@ -1,6 +1,7 @@
 import math
 import time
 import datetime
+from decimal import Decimal, ROUND_HALF_UP
 import config
 import state
 
@@ -53,12 +54,14 @@ def round_to_tick(value, tick_size):
     """Round a price to nearest valid tick."""
     if tick_size <= 0:
         return value
-    return round(round(value / tick_size) * tick_size, 10)
+    tick = Decimal(str(tick_size))
+    quantized = (Decimal(str(value)) / tick).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * tick
+    return float(quantized)
 
 
 def set_backoff(symbol, seconds=None):
     seconds = seconds or config.TP_SL_PENDING_BACKOFF_SECONDS
-    expires = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+    expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=seconds)
     state.bot_state.tp_sl_backoff[symbol] = {"until": expires.isoformat(), "logged": False}
 
 
@@ -71,7 +74,7 @@ def check_backoff(symbol):
     except Exception:
         del state.bot_state.tp_sl_backoff[symbol]
         return False, 0
-    remaining = (expires - datetime.datetime.now()).total_seconds()
+    remaining = (expires - datetime.datetime.utcnow()).total_seconds()
     if remaining > 0:
         return True, remaining
     del state.bot_state.tp_sl_backoff[symbol]
@@ -101,6 +104,9 @@ def safe_place_tp_sl(client, symbol, is_long, amount, computed_tp, computed_sl, 
     tick_size = fetch_symbol_tick_size(client, symbol)
     buffer = tick_size * cfg.TP_SL_BUFFER_TICKS
     fallback_mode = cfg.TP_SL_FALLBACK_MODE.upper()
+    if fallback_mode not in ("MARKET_REDUCE", "NONE"):
+        print(f"Invalid TP_SL_FALLBACK_MODE={fallback_mode}, defaulting to MARKET_REDUCE")
+        fallback_mode = "MARKET_REDUCE"
 
     rounded_tp = round_to_tick(computed_tp, tick_size)
     rounded_sl = round_to_tick(computed_sl, tick_size)
@@ -138,10 +144,14 @@ def safe_place_tp_sl(client, symbol, is_long, amount, computed_tp, computed_sl, 
                 print(f"{symbol} {reason} but fallback mode {fallback_mode} prevents market close")
         else:
             sl_res = client.place_stop_loss(symbol, close_side, amount, rounded_sl)
-            tp_res = client.place_take_profit(symbol, close_side, amount, rounded_tp)
-            result = bool(sl_res and tp_res)
-            if not result:
-                print(f"Failed placing TP/SL for {symbol}: sl_res={bool(sl_res)}, tp_res={bool(tp_res)}")
+            if not sl_res:
+                print(f"Failed placing SL for {symbol}, skipping TP placement")
+                result = False
+            else:
+                tp_res = client.place_take_profit(symbol, close_side, amount, rounded_tp)
+                result = bool(tp_res)
+                if not result:
+                    print(f"Failed placing TP for {symbol} after SL success")
     except Exception as exc:
         print(f"Error placing TP/SL for {symbol}: {exc}")
         result = False
