@@ -35,6 +35,7 @@ class BotState:
     reconciliation_log: List[Dict] = field(default_factory=list) # Log of reconciliation actions
     metrics: Metrics = field(default_factory=Metrics)
     balance_history: List[Dict] = field(default_factory=list) # Portfolio balance over time
+    tp_sl_backoff: Dict[str, Dict] = field(default_factory=dict) # symbol -> backoff expiry/log status
 
 # Global instance
 bot_state = BotState()

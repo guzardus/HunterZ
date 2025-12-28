@@ -6,6 +6,7 @@ import utils
 import lux_algo
 import risk_manager
 import state
+import order_utils
 from execution import BinanceClient
 import threading
 
@@ -263,6 +264,12 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         print(f"\n--- Reconciling TP/SL for {symbol} ({side}) ---")
         print(f"Position size: {position_size}, Entry: {entry_price}")
         
+        # Backoff check
+        in_backoff, remaining = order_utils.check_backoff(symbol)
+        if in_backoff:
+            print(f"Skipping TP/SL reconciliation for {symbol} due to backoff ({int(remaining)}s)")
+            return False
+        
         # Get existing TP/SL orders
         tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
         sl_order = tp_sl_orders['sl_order']
@@ -284,7 +291,6 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         
         # If no pending order, calculate TP/SL based on position
         if not sl_price or not tp_price:
-            # Use simple percentage-based TP/SL as fallback
             risk_pct = 0.01  # 1% risk
             rr_ratio = config.RR_RATIO
             
@@ -299,9 +305,6 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
             tp_price = float(client.exchange.price_to_precision(symbol, tp_price))
             print(f"Calculated TP/SL from position: SL={sl_price}, TP={tp_price}")
         
-        # Determine close side (opposite of position)
-        close_side = 'sell' if is_long else 'buy'
-        
         # Format position size with proper precision
         formatted_size = float(client.exchange.amount_to_precision(symbol, position_size))
         
@@ -310,7 +313,7 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         needs_tp = False
         
         if not sl_order:
-            print(f"⚠ Missing SL order for {symbol}")
+            print(f"⚠ Missing SL order for {symbol} ({side})")
             needs_sl = True
             state.add_reconciliation_log("missing_sl_detected", {
                 "symbol": symbol,
@@ -320,9 +323,8 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         else:
             sl_amount = float(sl_order.get('amount', 0))
             if abs(sl_amount - formatted_size) > formatted_size * config.TP_SL_QUANTITY_TOLERANCE:
-                print(f"⚠ SL quantity mismatch for {symbol}: {sl_amount} vs {formatted_size}")
+                print(f"⚠ SL quantity mismatch for {symbol} ({side}): {sl_amount} vs {formatted_size}")
                 needs_sl = True
-                # Cancel existing SL
                 client.cancel_order(symbol, sl_order['id'])
                 state.add_reconciliation_log("sl_quantity_mismatch", {
                     "symbol": symbol,
@@ -332,7 +334,7 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
                 })
         
         if not tp_order:
-            print(f"⚠ Missing TP order for {symbol}")
+            print(f"⚠ Missing TP order for {symbol} ({side})")
             needs_tp = True
             state.add_reconciliation_log("missing_tp_detected", {
                 "symbol": symbol,
@@ -342,9 +344,8 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         else:
             tp_amount = float(tp_order.get('amount', 0))
             if abs(tp_amount - formatted_size) > formatted_size * config.TP_SL_QUANTITY_TOLERANCE:
-                print(f"⚠ TP quantity mismatch for {symbol}: {tp_amount} vs {formatted_size}")
+                print(f"⚠ TP quantity mismatch for {symbol} ({side}): {tp_amount} vs {formatted_size}")
                 needs_tp = True
-                # Cancel existing TP
                 client.cancel_order(symbol, tp_order['id'])
                 state.add_reconciliation_log("tp_quantity_mismatch", {
                     "symbol": symbol,
@@ -353,58 +354,23 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
                     "message": f"TP order quantity mismatch, cancelling"
                 })
         
-        # Place missing or replacement orders
         if needs_sl or needs_tp:
-            print(f"Placing TP/SL orders for {symbol}...")
-            if needs_sl and needs_tp:
-                # Place both together
-                orders = client.place_sl_tp_orders(symbol, 'buy' if is_long else 'sell', 
-                                                  formatted_size, sl_price, tp_price)
-                if orders['sl_order'] and orders['tp_order']:
-                    print(f"✓ Successfully placed both TP and SL for {symbol}")
-                    state.add_reconciliation_log("tp_sl_placed", {
-                        "symbol": symbol,
-                        "sl_price": sl_price,
-                        "tp_price": tp_price,
-                        "size": formatted_size,
-                        "message": "TP/SL orders successfully placed"
-                    })
-                    return True
-                else:
-                    print(f"✗ Failed to place some TP/SL orders for {symbol}")
-                    return False
-            elif needs_sl:
-                # Place only SL
-                sl_order_result = client.place_stop_loss(symbol, close_side, formatted_size, sl_price)
-                if sl_order_result:
-                    print(f"✓ Successfully placed SL for {symbol}")
-                    state.add_reconciliation_log("sl_placed", {
-                        "symbol": symbol,
-                        "sl_price": sl_price,
-                        "size": formatted_size,
-                        "message": "SL order successfully placed"
-                    })
-                    return True
-                else:
-                    print(f"✗ Failed to place SL for {symbol}")
-                    return False
-            elif needs_tp:
-                # Place only TP
-                tp_order_result = client.place_take_profit(symbol, close_side, formatted_size, tp_price)
-                if tp_order_result:
-                    print(f"✓ Successfully placed TP for {symbol}")
-                    state.add_reconciliation_log("tp_placed", {
-                        "symbol": symbol,
-                        "tp_price": tp_price,
-                        "size": formatted_size,
-                        "message": "TP order successfully placed"
-                    })
-                    return True
-                else:
-                    print(f"✗ Failed to place TP for {symbol}")
-                    return False
+            print(f"Placing safe TP/SL orders for {symbol} ({side})...")
+            placed = order_utils.safe_place_tp_sl(
+                client, symbol, is_long, formatted_size, tp_price, sl_price, cfg=config
+            )
+            if placed:
+                state.add_reconciliation_log("tp_sl_placed", {
+                    "symbol": symbol,
+                    "sl_price": sl_price,
+                    "tp_price": tp_price,
+                    "size": formatted_size,
+                    "message": "TP/SL orders placed with safeguards"
+                })
+                return True
+            return False
         else:
-            print(f"✓ TP/SL orders are correct for {symbol}")
+            print(f"✓ TP/SL orders are correct for {symbol} ({side})")
             return True
             
     except Exception as e:
