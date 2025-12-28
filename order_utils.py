@@ -7,6 +7,133 @@ import config
 import state
 
 
+# Log throttling state: {(category, symbol): {"last_logged": datetime, "count": int}}
+_log_throttle_state = {}
+LOG_THROTTLE_INTERVAL_SECONDS = 60  # Minimum interval between repeated warnings
+
+
+def normalize_symbol(symbol):
+    """Normalize symbol to canonical format for consistent lookups and comparisons.
+    
+    Handles variations like:
+    - "XRP/USDT" vs "XRP/USDT:USDT" (futures suffix)
+    - Inconsistent casing
+    
+    Returns the base symbol without futures suffix (e.g., "XRP/USDT").
+    """
+    if not symbol:
+        return symbol
+    
+    # Uppercase for consistency
+    symbol = symbol.upper()
+    
+    # Strip futures suffix (e.g., ":USDT" from "XRP/USDT:USDT")
+    if ':' in symbol:
+        symbol = symbol.split(':')[0]
+    
+    return symbol
+
+
+def prices_are_equal(price1, price2, tick_size, tolerance_pct=0.001):
+    """Check if two prices are equal within a tolerance.
+    
+    Uses the larger of:
+    - tick_size: minimum price increment
+    - tolerance_pct * expected_price: percentage-based tolerance (default 0.1%)
+    
+    Args:
+        price1: First price to compare
+        price2: Second price to compare  
+        tick_size: Minimum price increment for the symbol
+        tolerance_pct: Percentage tolerance as decimal (default 0.001 = 0.1%)
+        
+    Returns:
+        bool: True if prices are within tolerance, False otherwise
+    """
+    if price1 is None or price2 is None:
+        return False
+    
+    try:
+        p1 = float(price1)
+        p2 = float(price2)
+        tick = float(tick_size) if tick_size and tick_size > 0 else 1e-8
+        
+        # Use max of tick size or percentage tolerance
+        ref_price = max(abs(p1), abs(p2))
+        pct_tolerance = ref_price * tolerance_pct if ref_price > 0 else 0
+        tolerance = max(tick, pct_tolerance)
+        
+        return abs(p1 - p2) <= tolerance
+    except (TypeError, ValueError):
+        return False
+
+
+def should_log_throttled(category, symbol, interval_seconds=None):
+    """Check if a throttled log message should be emitted.
+    
+    Returns True if we should log, False if throttled.
+    Also increments the suppressed count for summary logging.
+    
+    Args:
+        category: Log category (e.g., "tp_sl_inconsistent", "pending_order_active")
+        symbol: Trading symbol
+        interval_seconds: Override default throttle interval
+        
+    Returns:
+        tuple: (should_log: bool, suppressed_count: int)
+    """
+    global _log_throttle_state
+    
+    interval = interval_seconds or LOG_THROTTLE_INTERVAL_SECONDS
+    key = (category, normalize_symbol(symbol) if symbol else "")
+    now = datetime.datetime.now(timezone.utc)
+    
+    entry = _log_throttle_state.get(key)
+    if entry is None:
+        # First occurrence - should log
+        _log_throttle_state[key] = {"last_logged": now, "count": 0}
+        return True, 0
+    
+    elapsed = (now - entry["last_logged"]).total_seconds()
+    if elapsed >= interval:
+        # Enough time passed - should log
+        suppressed = entry["count"]
+        _log_throttle_state[key] = {"last_logged": now, "count": 0}
+        return True, suppressed
+    else:
+        # Throttled - don't log, increment counter
+        entry["count"] += 1
+        return False, 0
+
+
+def log_tp_sl_inconsistent_throttled(symbol, side, entry_price, tp, sl):
+    """Log TP/SL inconsistency warning with throttling.
+    
+    Limits repeated warnings to at most once per minute per symbol.
+    """
+    should_log, suppressed = should_log_throttled("tp_sl_inconsistent", symbol)
+    
+    if should_log:
+        msg = f"⚠️ Skipping closure for {symbol}: TP/SL inconsistent for {side} (entry {entry_price}, TP {tp}, SL {sl})"
+        if suppressed > 0:
+            msg += f" [repeated {suppressed} times in last {LOG_THROTTLE_INTERVAL_SECONDS}s]"
+        print(msg)
+
+
+def log_pending_order_active_throttled(order_id, symbol):
+    """Log pending order still active message with throttling.
+    
+    Limits repeated messages to at most once per minute per symbol.
+    """
+    should_log, suppressed = should_log_throttled("pending_order_active", symbol)
+    
+    if should_log:
+        msg = f"Pending order {order_id} still active for {symbol}, skipping new placement"
+        if suppressed > 0:
+            msg += f" [repeated {suppressed} times in last {LOG_THROTTLE_INTERVAL_SECONDS}s]"
+        print(msg)
+
+
 def fetch_mark_price(client, symbol):
     """Fetch a best-effort current/mark price for the symbol."""
     try:

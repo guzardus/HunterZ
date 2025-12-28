@@ -7,6 +7,7 @@ import lux_algo
 import risk_manager
 import state
 import order_utils
+from order_utils import log_pending_order_active_throttled, normalize_symbol
 from execution import BinanceClient
 import threading
 from reconciler.closure_fix import get_position_side, log_tp_sl_inconsistent
@@ -578,12 +579,23 @@ def monitor_and_close_positions(client):
                         close_reason = "sl_breach"
                 
                 # Sanity check: ensure TP/SL are on the correct side of entry before forcing closure
+                # Use tick-tolerant comparisons to avoid false positives from rounding differences
+                tick_size = order_utils.fetch_symbol_tick_size(client, symbol)
+                
                 if side == 'LONG':
-                    if (take_profit and take_profit <= entry_price) or (stop_loss and stop_loss >= entry_price):
+                    # For LONG: TP should be above entry, SL should be below entry
+                    # Using tick-tolerant check: TP <= entry is invalid, SL >= entry is invalid
+                    tp_invalid = take_profit and not order_utils.prices_are_equal(take_profit, entry_price, tick_size) and take_profit <= entry_price
+                    sl_invalid = stop_loss and not order_utils.prices_are_equal(stop_loss, entry_price, tick_size) and stop_loss >= entry_price
+                    if tp_invalid or sl_invalid:
                         log_tp_sl_inconsistent(position, entry_price, take_profit, stop_loss)
                         continue
                 elif side == 'SHORT':
-                    if (take_profit and take_profit >= entry_price) or (stop_loss and stop_loss <= entry_price):
+                    # For SHORT: TP should be below entry, SL should be above entry
+                    # Using tick-tolerant check: TP >= entry is invalid, SL <= entry is invalid
+                    tp_invalid = take_profit and not order_utils.prices_are_equal(take_profit, entry_price, tick_size) and take_profit >= entry_price
+                    sl_invalid = stop_loss and not order_utils.prices_are_equal(stop_loss, entry_price, tick_size) and stop_loss <= entry_price
+                    if tp_invalid or sl_invalid:
                         log_tp_sl_inconsistent(position, entry_price, take_profit, stop_loss)
                         continue
                 
@@ -908,7 +920,7 @@ def run_bot_logic():
                         order_status = client.get_order_status(symbol, pending_order_id)
                         if order_status and order_status.get('status') == 'open':
                             # Order still exists on exchange, skip new placement
-                            print(f"Pending order {pending_order_id} still active for {symbol}, skipping new placement")
+                            log_pending_order_active_throttled(pending_order_id, symbol)
                             state.add_reconciliation_log("placement_skipped", {
                                 "symbol": symbol,
                                 "order_id": pending_order_id,
