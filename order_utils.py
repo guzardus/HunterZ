@@ -1,6 +1,7 @@
 import math
 import time
 import datetime
+from datetime import timezone
 from decimal import Decimal, ROUND_HALF_UP
 import config
 import state
@@ -61,7 +62,7 @@ def round_to_tick(value, tick_size):
 
 def set_backoff(symbol, seconds=None):
     seconds = seconds or config.TP_SL_PENDING_BACKOFF_SECONDS
-    expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=seconds)
+    expires = datetime.datetime.now(timezone.utc) + datetime.timedelta(seconds=seconds)
     state.bot_state.tp_sl_backoff[symbol] = {"until": expires.isoformat(), "logged": False}
 
 
@@ -74,7 +75,7 @@ def check_backoff(symbol):
     except Exception:
         del state.bot_state.tp_sl_backoff[symbol]
         return False, 0
-    remaining = (expires - datetime.datetime.utcnow()).total_seconds()
+    remaining = (expires - datetime.datetime.now(timezone.utc)).total_seconds()
     if remaining > 0:
         return True, remaining
     del state.bot_state.tp_sl_backoff[symbol]
