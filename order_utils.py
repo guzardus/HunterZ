@@ -86,7 +86,7 @@ def place_market_reduce_only(client, symbol, amount, side, reason="fallback"):
         return None
 
 
-def safe_place_tp_sl(client, symbol, is_long, amount, computed_tp, computed_sl, cfg=config):
+def safe_place_tp_sl(client, symbol, is_long, amount, computed_tp, computed_sl, *, cfg=config):
     """Place TP/SL with price pre-checks, rounding, buffer and fallback."""
     in_backoff, remaining = check_backoff(symbol)
     if in_backoff:
@@ -100,7 +100,7 @@ def safe_place_tp_sl(client, symbol, is_long, amount, computed_tp, computed_sl, 
     current_price = fetch_mark_price(client, symbol)
     tick_size = fetch_symbol_tick_size(client, symbol)
     buffer = tick_size * cfg.TP_SL_BUFFER_TICKS
-    fallback_mode = getattr(cfg, "TP_SL_FALLBACK_MODE", "MARKET_REDUCE").upper()
+    fallback_mode = cfg.TP_SL_FALLBACK_MODE.upper()
 
     rounded_tp = round_to_tick(computed_tp, tick_size)
     rounded_sl = round_to_tick(computed_sl, tick_size)
@@ -126,27 +126,25 @@ def safe_place_tp_sl(client, symbol, is_long, amount, computed_tp, computed_sl, 
         tp_crossed = rounded_tp >= current_price - buffer
         sl_crossed = rounded_sl <= current_price + buffer
 
+    result = False
     try:
         if tp_crossed or sl_crossed:
             reason = "tp_already_crossed" if tp_crossed else "sl_already_crossed"
             if fallback_mode == "MARKET_REDUCE":
                 print(f"{symbol} {reason}: placing market reduce-only close")
                 order = place_market_reduce_only(client, symbol, amount, close_side, reason=reason)
-                set_backoff(symbol)
-                return order is not None
-            print(f"{symbol} {reason} but fallback mode {fallback_mode} prevents market close")
-            set_backoff(symbol)
-            return False
-
-        sl_res = client.place_stop_loss(symbol, close_side, amount, rounded_sl)
-        tp_res = client.place_take_profit(symbol, close_side, amount, rounded_tp)
-        if sl_res and tp_res:
-            set_backoff(symbol)
-            return True
-        print(f"Failed placing TP/SL for {symbol}: sl_res={bool(sl_res)}, tp_res={bool(tp_res)}")
-        set_backoff(symbol)
-        return False
+                result = order is not None
+            else:
+                print(f"{symbol} {reason} but fallback mode {fallback_mode} prevents market close")
+        else:
+            sl_res = client.place_stop_loss(symbol, close_side, amount, rounded_sl)
+            tp_res = client.place_take_profit(symbol, close_side, amount, rounded_tp)
+            result = bool(sl_res and tp_res)
+            if not result:
+                print(f"Failed placing TP/SL for {symbol}: sl_res={bool(sl_res)}, tp_res={bool(tp_res)}")
     except Exception as exc:
         print(f"Error placing TP/SL for {symbol}: {exc}")
+        result = False
+    finally:
         set_backoff(symbol)
-        return False
+    return result

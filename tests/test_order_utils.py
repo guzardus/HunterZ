@@ -8,11 +8,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import order_utils
 import state
 
+TEST_SYMBOL = "BTC/USDT"
+
 
 class DummyExchange:
     def __init__(self, price):
         self.price = price
-        self.markets = {"BTC/USDT": {"info": {"filters": [{"filterType": "PRICE_FILTER", "tickSize": "0.1"}]}}}
+        self.markets = {TEST_SYMBOL: {"info": {"filters": [{"filterType": "PRICE_FILTER", "tickSize": "0.1"}]}}}
 
     def fetch_ticker(self, symbol):
         return {"last": self.price}
@@ -54,7 +56,7 @@ class TestOrderUtils(unittest.TestCase):
 
     def test_safe_place_tp_sl_places_conditionals(self):
         client = DummyClient(price=100)
-        ok = order_utils.safe_place_tp_sl(client, "BTC/USDT", True, 1, 110, 90)
+        ok = order_utils.safe_place_tp_sl(client, TEST_SYMBOL, True, 1, 110, 90)
         self.assertTrue(ok)
         self.assertEqual(client.stop_calls, 1)
         self.assertEqual(client.tp_calls, 1)
@@ -62,7 +64,7 @@ class TestOrderUtils(unittest.TestCase):
 
     def test_safe_place_tp_sl_market_fallback_when_crossed(self):
         client = DummyClient(price=120)  # TP already crossed for long
-        ok = order_utils.safe_place_tp_sl(client, "BTC/USDT", True, 1, 110, 90)
+        ok = order_utils.safe_place_tp_sl(client, TEST_SYMBOL, True, 1, 110, 90)
         self.assertTrue(ok)
         self.assertEqual(client.close_calls, 1)
         self.assertEqual(client.stop_calls, 0)
@@ -70,10 +72,10 @@ class TestOrderUtils(unittest.TestCase):
 
     def test_backoff_skips_repeat_attempt(self):
         client = DummyClient(price=120)
-        first = order_utils.safe_place_tp_sl(client, "BTC/USDT", True, 1, 110, 90)
+        first = order_utils.safe_place_tp_sl(client, TEST_SYMBOL, True, 1, 110, 90)
         self.assertTrue(first)
         # second call should skip due to backoff
-        second = order_utils.safe_place_tp_sl(client, "BTC/USDT", True, 1, 110, 90)
+        second = order_utils.safe_place_tp_sl(client, TEST_SYMBOL, True, 1, 110, 90)
         self.assertFalse(second)
         self.assertEqual(client.close_calls, 1)
 
