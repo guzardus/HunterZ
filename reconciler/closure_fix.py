@@ -24,7 +24,10 @@ def get_position_side(pos: dict) -> str:
         if key in pos and pos[key] is not None:
             try:
                 val = float(pos[key])
-                return "LONG" if val > 0 else "SHORT"
+                if val > 0:
+                    return "LONG"
+                if val < 0:
+                    return "SHORT"
             except Exception:
                 pass
 
