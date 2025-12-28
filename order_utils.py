@@ -99,7 +99,8 @@ def safe_place_tp_sl(client, symbol, is_long, amount, computed_tp, computed_sl, 
 
     current_price = fetch_mark_price(client, symbol)
     tick_size = fetch_symbol_tick_size(client, symbol)
-    buffer = tick_size * getattr(cfg, "TP_SL_BUFFER_TICKS", 1)
+    buffer = tick_size * cfg.TP_SL_BUFFER_TICKS
+    fallback_mode = getattr(cfg, "TP_SL_FALLBACK_MODE", "MARKET_REDUCE").upper()
 
     rounded_tp = round_to_tick(computed_tp, tick_size)
     rounded_sl = round_to_tick(computed_sl, tick_size)
@@ -128,10 +129,14 @@ def safe_place_tp_sl(client, symbol, is_long, amount, computed_tp, computed_sl, 
     try:
         if tp_crossed or sl_crossed:
             reason = "tp_already_crossed" if tp_crossed else "sl_already_crossed"
-            print(f"{symbol} {reason}: placing market reduce-only close")
-            order = place_market_reduce_only(client, symbol, amount, close_side, reason=reason)
+            if fallback_mode == "MARKET_REDUCE":
+                print(f"{symbol} {reason}: placing market reduce-only close")
+                order = place_market_reduce_only(client, symbol, amount, close_side, reason=reason)
+                set_backoff(symbol)
+                return order is not None
+            print(f"{symbol} {reason} but fallback mode {fallback_mode} prevents market close")
             set_backoff(symbol)
-            return order is not None
+            return False
 
         sl_res = client.place_stop_loss(symbol, close_side, amount, rounded_sl)
         tp_res = client.place_take_profit(symbol, close_side, amount, rounded_tp)
