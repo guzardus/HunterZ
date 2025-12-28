@@ -1,4 +1,5 @@
 import logging
+from order_utils import log_tp_sl_inconsistent_throttled
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,8 @@ def log_tp_sl_inconsistent(
     """
     Logs a consistent, correctly-sided warning message about TP/SL inconsistency.
     Use this to replace any hard-coded or incorrectly sided log messages.
+    
+    Uses throttled logging to avoid spam - at most once per minute per symbol.
 
     Args:
         pos: position-like mapping containing symbol/side/size fields.
@@ -55,11 +58,6 @@ def log_tp_sl_inconsistent(
     """
     symbol = pos.get("symbol") or pos.get("market") or "UNKNOWN"
     position_side = get_position_side(pos)
-    logger.warning(
-        "⚠️ Skipping closure for %s: TP/SL inconsistent for %s (entry %s, TP %s, SL %s)",
-        symbol,
-        position_side,
-        entry,
-        tp,
-        sl,
-    )
+    
+    # Use throttled logging to avoid repeated spam
+    log_tp_sl_inconsistent_throttled(symbol, position_side, entry, tp, sl)
