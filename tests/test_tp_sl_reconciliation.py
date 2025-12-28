@@ -10,6 +10,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import state
+from main import reconcile_position_tp_sl
 
 
 class TestTPSLReconciliationLogic(unittest.TestCase):
@@ -207,6 +208,37 @@ class TestTPSLReconciliationLogic(unittest.TestCase):
         eth_position = state.bot_state.positions['ETH/USDT']
         self.assertEqual(eth_position['stop_loss'], 3100.0)
         self.assertEqual(eth_position['take_profit'], 2800.0)
+
+    @patch("main.order_utils.safe_place_tp_sl")
+    @patch("main.order_utils.check_backoff", return_value=(False, 0))
+    def test_reconcile_uses_explicit_short_side(self, mock_backoff, mock_safe_place):
+        """Ensure reconcile_position_tp_sl respects explicit SHORT side even with positive size"""
+        mock_safe_place.return_value = True
+
+        mock_client = Mock()
+        mock_client.exchange = Mock()
+        mock_client.exchange.price_to_precision = Mock(side_effect=lambda s, p: p)
+        mock_client.exchange.amount_to_precision = Mock(side_effect=lambda s, a: a)
+        mock_client.get_tp_sl_orders_for_position = Mock(return_value={"sl_order": None, "tp_order": None})
+        mock_client.cancel_order = Mock(return_value=True)
+
+        position = {
+            "symbol": "SOL/USDT",
+            "side": "SHORT",
+            # Positive position size with explicit SHORT side mimics hedged-mode payloads
+            "positionAmt": 112.0,
+            "entryPrice": 124.28,
+        }
+
+        success = reconcile_position_tp_sl(mock_client, "SOL/USDT", position, pending_order=None)
+
+        self.assertTrue(success)
+        mock_safe_place.assert_called_once()
+        _, _, is_long_arg, _, tp_price, sl_price = mock_safe_place.call_args[0]
+
+        self.assertFalse(is_long_arg)
+        self.assertLess(tp_price, position["entryPrice"])
+        self.assertGreater(sl_price, position["entryPrice"])
 
 
 if __name__ == '__main__':

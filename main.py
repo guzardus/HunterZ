@@ -258,8 +258,8 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
             return True  # No position, nothing to reconcile
         
         position_size = abs(position_amount)
-        is_long = position_amount > 0
-        side = 'LONG' if is_long else 'SHORT'
+        side = get_position_side(position)
+        is_long = side == 'LONG'
         entry_price = float(position.get('entryPrice', 0) or 0)
         
         print(f"\n--- Reconciling TP/SL for {symbol} ({side}) ---")
@@ -422,7 +422,7 @@ def reconcile_existing_positions_with_trades(client):
                 except (ValueError, TypeError) as e:
                     print(f"WARNING: Invalid position data for {symbol}: {e}")
                     continue
-                side = 'LONG' if position_amount > 0 else 'SHORT'
+                side = get_position_side(position)
                 
                 print(f"Creating trade entry for existing position: {symbol} {side}")
                 
