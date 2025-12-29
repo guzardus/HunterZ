@@ -19,6 +19,24 @@ def prepare_dataframe(ohlcv):
     df.set_index('timestamp', inplace=True)
     return df
 
+def timeframe_to_seconds(timeframe: str):
+    """Convert ccxt timeframe string (e.g., '30m', '1h') to seconds."""
+    try:
+        unit = timeframe[-1]
+        value = int(timeframe[:-1])
+        multiplier = {
+            's': 1,
+            'm': 60,
+            'h': 3600,
+            'd': 86400,
+            'w': 604800,
+        }.get(unit)
+        if multiplier:
+            return value * multiplier
+    except Exception:
+        pass
+    return 1800
+
 def format_order_params(client, symbol, params):
     """Format order parameters with proper precision."""
     qty = client.exchange.amount_to_precision(symbol, params['quantity'])
@@ -533,7 +551,7 @@ def monitor_and_close_positions(client):
         
         for symbol in position_symbols:
             try:
-                position = state.bot_state.positions.get(symbol)
+                position = state.get_position(symbol)
                 if not position:
                     continue
                 
@@ -709,6 +727,11 @@ def run_bot_logic():
     # Track last reconciliation time
     import time as time_module
     last_position_reconciliation = time_module.time()
+    last_ohlcv_fetch = {}
+    cached_ohlcv = {}
+    timeframe_seconds = timeframe_to_seconds(config.TIMEFRAME)
+    buffer_seconds = config.CANDLE_CLOSE_BUFFER_SECONDS
+    ohlcv_cache_max_age = config.OHLCV_CACHE_MAX_AGE_SECONDS
     
     while True:
         try:
@@ -719,6 +742,22 @@ def run_bot_logic():
                 reconcile_all_positions_tp_sl(client)
                 last_position_reconciliation = current_time
             
+            symbols = utils.get_trading_pairs()
+
+            # Batch fetch exchange state once per loop
+            exchange_orders = client.get_all_open_orders()
+            state.update_exchange_open_orders(exchange_orders)
+            exchange_orders_by_id = {o.get('id'): o for o in exchange_orders if o.get('id')}
+
+            positions = client.get_all_positions()
+            positions_by_norm = {normalize_symbol(p.get('symbol')): p for p in positions}
+            for symbol in symbols:
+                position = positions_by_norm.get(normalize_symbol(symbol))
+                state.update_position(symbol, position)
+
+            # Enrich positions with TP/SL derived from exchange orders
+            state.enrich_positions_with_tp_sl()
+
             # 1. Check and process any pending orders first
             for symbol in list(state.bot_state.pending_orders.keys()):
                 pending = state.get_pending_order(symbol)
@@ -823,39 +862,44 @@ def run_bot_logic():
                                 state.save_metrics()
                             state.remove_pending_order(symbol)
             
-            # 2. Fetch Trading Pairs
-            symbols = utils.get_trading_pairs()
-            # print(f"\nScanning {len(symbols)} pairs: {symbols}")
-            
             # Fetch full balance info
             full_balance = client.get_full_balance()
             state.update_full_balance(full_balance['total'], full_balance['free'], full_balance['used'])
             # print(f"Current Balance: {full_balance['total']:.2f} USDT (Free: {full_balance['free']:.2f})")
-            
-            # Fetch all open orders from exchange and update state
-            exchange_orders = client.get_all_open_orders()
-            state.update_exchange_open_orders(exchange_orders)
-            
-            # Enrich positions with TP/SL derived from exchange orders
-            state.enrich_positions_with_tp_sl()
-            
+
             # Monitor and force-close positions if TP/SL breached
             monitor_and_close_positions(client)
             
             for symbol in symbols:
                 # print(f"\n--- Processing {symbol} ---")
+
+                position = state.get_position(symbol)
                 
-                # Check current position
-                position = client.get_position(symbol)
-                state.update_position(symbol, position)
-                
-                # 2. Fetch Data
-                ohlcv = client.fetch_ohlcv(symbol)
-                if not ohlcv:
-                    continue
-                    
-                df = prepare_dataframe(ohlcv)
-                
+                now_ts = time_module.time()
+                interval = timeframe_seconds
+                seconds_to_close = interval - (now_ts % interval)
+                is_near_close = seconds_to_close <= buffer_seconds
+                cached_df = cached_ohlcv.get(symbol)
+                last_candle_ts = None
+                if cached_df is not None and not cached_df.empty:
+                    last_candle_ts = cached_df.index[-1].timestamp()
+
+                should_fetch = True
+                if last_candle_ts:
+                    age = now_ts - last_candle_ts
+                    if age < ohlcv_cache_max_age and not is_near_close:
+                        should_fetch = False
+
+                df = cached_df if cached_df is not None else None
+                if should_fetch:
+                    ohlcv = client.fetch_ohlcv(symbol)
+                    if ohlcv:
+                        df = prepare_dataframe(ohlcv)
+                        cached_ohlcv[symbol] = df
+                        last_ohlcv_fetch[symbol] = now_ts
+                    if df is None:
+                        continue
+
                 # Update State for Frontend Chart
                 state.update_ohlcv(symbol, df)
                 
@@ -925,40 +969,24 @@ def run_bot_logic():
                 # 6. Check if pending order exists and verify it's still on exchange
                 pending = state.get_pending_order(symbol)
                 if pending:
-                    # Verify the order still exists on exchange
                     pending_order_id = pending.get('order_id')
-                    try:
-                        order_status = client.get_order_status(symbol, pending_order_id)
-                        if order_status and order_status.get('status') == 'open':
-                            # Order still exists on exchange, skip new placement
-                            log_pending_order_active_throttled(pending_order_id, symbol)
-                            state.add_reconciliation_log("placement_skipped", {
-                                "symbol": symbol,
-                                "order_id": pending_order_id,
-                                "reason": "Pending order still active on exchange"
-                            })
-                            continue
-                        else:
-                            # Order was cancelled or filled, remove from pending
-                            status = order_status.get('status', 'not found') if order_status else 'not found'
-                            print(f"Pending order {pending_order_id} for {symbol} is {status}, removing from tracking")
-                            state.remove_pending_order(symbol)
-                            state.add_reconciliation_log("pending_order_removed", {
-                                "symbol": symbol,
-                                "order_id": pending_order_id,
-                                "status": status,
-                                "message": "Pending order no longer active, removed from tracking"
-                            })
-                    except Exception as e:
-                        # If we can't fetch the order, assume it was cancelled and remove from pending
-                        print(f"Could not verify pending order {pending_order_id} for {symbol}: {e}")
-                        print(f"Removing from pending orders to allow new placement")
+                    if pending_order_id in exchange_orders_by_id:
+                        # Order still exists on exchange, skip new placement
+                        log_pending_order_active_throttled(pending_order_id, symbol)
+                        state.add_reconciliation_log("placement_skipped", {
+                            "symbol": symbol,
+                            "order_id": pending_order_id,
+                            "reason": "Pending order still active on exchange"
+                        })
+                        continue
+                    else:
+                        print(f"Pending order {pending_order_id} for {symbol} no longer active, removing from tracking")
                         state.remove_pending_order(symbol)
                         state.add_reconciliation_log("pending_order_removed", {
                             "symbol": symbol,
                             "order_id": pending_order_id,
-                            "error": str(e),
-                            "message": "Could not verify pending order, removed from tracking"
+                            "status": "not found",
+                            "message": "Pending order no longer active, removed from tracking"
                         })
                 
                 # 7. Execute - cancel existing orders and place new limit order

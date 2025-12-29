@@ -1,6 +1,29 @@
 import ccxt
+import datetime
 import logging
+import time
 import config
+import state
+from functools import wraps
+from order_utils import normalize_symbol
+
+RATE_LIMIT_PER_MINUTE = getattr(config, "BINANCE_WEIGHT_LIMIT_PER_MIN", 2400)
+BAN_SLEEP_SECONDS = getattr(config, "BINANCE_BAN_SLEEP_SECONDS", 300)
+
+
+def rate_limit_guard(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        try:
+            result = func(self, *args, **kwargs)
+            self._check_rate_limit_headers()
+            return result
+        except Exception as e:
+            if self._handle_rate_limit_error(e):
+                return None
+            raise
+
+    return wrapper
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +46,33 @@ class BinanceClient:
                 print(f"Binance client initialized with defaultType={default_type}")
             except Exception:
                 pass
+        self.allowed_symbols = {normalize_symbol(sym) for sym in config.TRADING_PAIRS}
+        self._cached_positions = {}
+
+    def _handle_rate_limit_error(self, error) -> bool:
+        code = getattr(error, 'code', None) or getattr(error, 'status', None) or getattr(error, 'httpStatusCode', None)
+        body = getattr(error, 'body', '') or ''
+        if isinstance(error, ccxt.RateLimitExceeded) or code in (418, 429) or ('418' in body) or ('429' in body):
+            print(f"Rate limit or ban detected, backing off for {BAN_SLEEP_SECONDS} seconds...")
+            time.sleep(BAN_SLEEP_SECONDS)
+            return True
+        return False
+
+    def _check_rate_limit_headers(self):
+        try:
+            headers = getattr(self.exchange, 'last_response_headers', None) or {}
+            used = headers.get('X-MBX-USED-WEIGHT-1M') or headers.get('x-mbx-used-weight-1m')
+            if used:
+                used_val = float(used)
+                if used_val >= 0.8 * RATE_LIMIT_PER_MINUTE:
+                    now = datetime.datetime.utcnow()
+                    sleep_seconds = 60 - now.second - now.microsecond / 1_000_000
+                    if sleep_seconds > 0:
+                        print(f"Weight {used_val}/{RATE_LIMIT_PER_MINUTE} hit 80%, sleeping {sleep_seconds:.1f}s until next minute")
+                        time.sleep(sleep_seconds)
+        except Exception:
+            # If headers are missing or parsing fails, skip backoff to avoid blocking the bot unexpectedly
+            pass
 
     @staticmethod
     def _extract_position_meta(position, side_value):
@@ -65,6 +115,7 @@ class BinanceClient:
             print(f"Warning: could not resolve symbol {symbol}: {e}")
         return symbol
 
+    @rate_limit_guard
     def fetch_ohlcv(self, symbol, timeframe=config.TIMEFRAME, limit=100):
         try:
             resolved_symbol = self._resolve_symbol(symbol)
@@ -74,6 +125,7 @@ class BinanceClient:
             print(f"Error fetching OHLCV for {symbol}: {e}")
             return []
 
+    @rate_limit_guard
     def get_balance(self):
         try:
             balance = self.exchange.fetch_balance()
@@ -82,6 +134,7 @@ class BinanceClient:
             print(f"Error fetching balance: {e}")
             return 0.0
 
+    @rate_limit_guard
     def get_full_balance(self):
         """Get complete balance information including total, free, and used."""
         try:
@@ -96,15 +149,20 @@ class BinanceClient:
             print(f"Error fetching full balance: {e}")
             return {'total': 0.0, 'free': 0.0, 'used': 0.0}
 
+    @rate_limit_guard
     def get_position(self, symbol):
         try:
-            resolved_symbol = self._resolve_symbol(symbol)
-            positions = self.exchange.fetch_positions([resolved_symbol])
+            norm = normalize_symbol(symbol)
+            if norm in self._cached_positions:
+                return self._cached_positions[norm]
+            for pos_symbol, cached in state.bot_state.positions.items():
+                if normalize_symbol(pos_symbol) == norm:
+                    return cached
+
+            positions = self.get_all_positions()
             for pos in positions:
-                if pos.get('symbol') in (symbol, resolved_symbol):
-                    # Preserve the exchange symbol while keeping the configured name for state
+                if normalize_symbol(pos.get('symbol')) == norm:
                     pos = pos.copy()
-                    pos['exchange_symbol'] = pos.get('symbol', resolved_symbol)
                     pos['symbol'] = symbol
                     return pos
             return None
@@ -112,37 +170,43 @@ class BinanceClient:
             print(f"Error fetching position for {symbol}: {e}")
             return None
 
+    @rate_limit_guard
     def get_all_positions(self):
         """Fetch all open positions from the exchange."""
         try:
             positions = self.exchange.fetch_positions()
-            # Filter to only positions with non-zero amounts
+            configured_symbols = {normalize_symbol(cfg): cfg for cfg in config.TRADING_PAIRS}
             open_positions = []
             for pos in positions:
                 contracts = float(pos.get('contracts', 0) or 0)
-                if contracts != 0:
+                if contracts == 0:
+                    continue
+                pos_symbol = pos.get('symbol')
+                normalized_pos_symbol = normalize_symbol(pos_symbol)
+                configured = configured_symbols.get(normalized_pos_symbol)
+                if configured:
+                    pos = pos.copy()
+                    pos['exchange_symbol'] = pos_symbol
+                    pos['symbol'] = configured
                     open_positions.append(pos)
+            self._cached_positions = {normalize_symbol(p.get('symbol')): p for p in open_positions}
             return open_positions
         except Exception as e:
             print(f"Error fetching all positions: {e}")
             return []
 
+    @rate_limit_guard
     def get_all_open_orders(self):
         """Fetch all open orders from the exchange across all trading pairs."""
         try:
-            all_orders = []
-            for symbol in config.TRADING_PAIRS:
-                try:
-                    resolved_symbol = self._resolve_symbol(symbol)
-                    symbol_orders = self.exchange.fetch_open_orders(resolved_symbol)
-                    all_orders.extend(symbol_orders)
-                except Exception as symbol_err:
-                    print(f"Error fetching open orders for {symbol}: {symbol_err}")
-            return all_orders
+            orders = self.exchange.fetch_open_orders()
+            allowed = self.allowed_symbols or {normalize_symbol(sym) for sym in config.TRADING_PAIRS}
+            return [o for o in orders if normalize_symbol(o.get('symbol')) in allowed]
         except Exception as e:
             print(f"Error fetching all open orders: {e}")
             return []
 
+    @rate_limit_guard
     def get_recent_trades(self, symbol=None, limit=50):
         """Fetch recent closed trades/fills from the exchange."""
         try:
@@ -167,6 +231,7 @@ class BinanceClient:
             print(f"Error fetching recent trades: {e}")
             return []
 
+    @rate_limit_guard
     def cancel_all_orders(self, symbol):
         try:
             resolved_symbol = self._resolve_symbol(symbol)
@@ -175,6 +240,7 @@ class BinanceClient:
         except Exception as e:
             print(f"Error cancelling orders for {symbol}: {e}")
 
+    @rate_limit_guard
     def place_limit_order(self, symbol, side, amount, price):
         try:
             resolved_symbol = self._resolve_symbol(symbol)
@@ -188,6 +254,7 @@ class BinanceClient:
             print(f"Error placing limit order for {symbol}: {e}")
             return None
 
+    @rate_limit_guard
     def place_stop_loss(self, symbol, side, amount, stop_price):
         try:
             resolved_symbol = self._resolve_symbol(symbol)
@@ -203,6 +270,7 @@ class BinanceClient:
             print(f"Error placing SL for {symbol}: {e}")
             return None
 
+    @rate_limit_guard
     def place_take_profit(self, symbol, side, amount, tp_price):
         try:
             resolved_symbol = self._resolve_symbol(symbol)
@@ -218,6 +286,7 @@ class BinanceClient:
             print(f"Error placing TP for {symbol}: {e}")
             return None
 
+    @rate_limit_guard
     def get_order_status(self, symbol, order_id):
         """Check the status of an order."""
         try:
@@ -237,6 +306,7 @@ class BinanceClient:
         
         return {'sl_order': sl_order, 'tp_order': tp_order}
 
+    @rate_limit_guard
     def get_open_orders(self, symbol=None):
         """Fetch open orders from the exchange.
         
@@ -291,6 +361,7 @@ class BinanceClient:
             print(f"Error getting TP/SL orders for {symbol}: {e}")
             return {'sl_order': None, 'tp_order': None}
     
+    @rate_limit_guard
     def cancel_order(self, symbol, order_id):
         """Cancel a specific order.
         
@@ -310,6 +381,7 @@ class BinanceClient:
             print(f"Error cancelling order {order_id} for {symbol}: {e}")
             return False
     
+    @rate_limit_guard
     def close_position_market(self, symbol, side, amount, reason="manual"):
         """Close a position immediately with a market order.
         

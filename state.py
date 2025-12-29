@@ -196,6 +196,10 @@ def update_position(symbol: str, position: Dict):
             _close_trade_in_history(symbol, old_position)
         del bot_state.positions[symbol]
 
+def get_position(symbol: str):
+    """Retrieve cached position for a symbol."""
+    return bot_state.positions.get(symbol)
+
 
 def _normalize_order_field(order: Dict, field_name: str, fallback_name: str = None):
     """Helper to normalize order field names across different exchange formats.
