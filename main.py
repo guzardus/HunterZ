@@ -360,6 +360,30 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         
         # Place missing or replacement orders
         if needs_sl or needs_tp:
+            # Safety check: If we have a pending order with recent TP/SL placement,
+            # wait a bit before trying again to let the exchange API reflect the new orders.
+            # This helps prevent duplicate orders when the API response lags.
+            if pending_order and pending_order.get('last_tp_sl_placement'):
+                import datetime as dt
+                try:
+                    last_placement_str = pending_order.get('last_tp_sl_placement')
+                    last_placement = dt.datetime.fromisoformat(last_placement_str)
+                    seconds_since_placement = (dt.datetime.now() - last_placement).total_seconds()
+                    
+                    # If orders were placed within the last 30 seconds, skip this cycle
+                    # to allow the exchange API to reflect the changes
+                    if seconds_since_placement < 30:
+                        logger.info("Skipping TP/SL placement for %s - orders placed %.1f seconds ago, "
+                                   "waiting for API to sync", symbol, seconds_since_placement)
+                        state.add_reconciliation_log("tp_sl_placement_deferred", {
+                            "symbol": symbol,
+                            "seconds_since_placement": seconds_since_placement,
+                            "message": f"Deferring TP/SL placement - waiting for API sync"
+                        })
+                        return True  # Return success to avoid repeated attempts
+                except (ValueError, TypeError) as e:
+                    logger.debug("Could not parse last_tp_sl_placement for %s: %s", symbol, e)
+            
             print(f"Placing TP/SL orders for {symbol}...")
             if needs_sl and needs_tp:
                 # Place both together

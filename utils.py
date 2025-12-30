@@ -30,23 +30,32 @@ def safe_split(value, sep=':', maxsplit=-1):
 
 def normalize_symbol(symbol):
     """
-    Normalize a trading symbol to a consistent format.
+    Normalize a trading symbol to a consistent format for comparison.
     
     Handles various symbol formats like:
-    - "BTC/USDC:USDC" -> "BTC/USDC:USDC" (already normalized for Hyperliquid)
-    - "BTC/USDC" -> "BTC/USDC"
+    - "BTC/USDC:USDC" -> "BTC/USDC" (strip settlement suffix)
+    - "BTC/USDC" -> "BTC/USDC" 
     - "BTCUSDC" -> "BTCUSDC"
+    
+    This is used for comparing symbols from different sources (exchange, position,
+    orders) which may use different formats. For example, Hyperliquid may return
+    orders with symbol "BTC/USDC" while the position uses "BTC/USDC:USDC".
     
     Args:
         symbol: Input symbol string
         
     Returns:
-        str: Normalized symbol string
+        str: Normalized symbol string for comparison purposes
     """
     if not symbol:
         return symbol
     
     resolved = symbol.strip()
+    
+    # Strip settlement currency suffix (e.g., ":USDC" from "BTC/USDC:USDC")
+    # This allows matching between "BTC/USDC:USDC" and "BTC/USDC"
+    if ':' in resolved:
+        resolved = resolved.split(':')[0]
     
     # Log the normalization for debugging
     logger.debug("normalize_symbol: input=%s -> resolved=%s", symbol, resolved)
