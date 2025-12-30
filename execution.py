@@ -573,27 +573,79 @@ class HyperliquidClient:
     def get_tp_sl_orders_for_position(self, symbol):
         """Get TP/SL orders for a specific symbol.
         
+        Uses normalized symbol comparison to handle format differences between
+        exchange order symbols (e.g., "BTC/USDC") and position symbols 
+        (e.g., "BTC/USDC:USDC").
+        
         Args:
             symbol: Trading symbol to check for TP/SL orders
             
         Returns:
             dict: {'sl_order': order or None, 'tp_order': order or None}
         """
+        from utils import normalize_symbol
+        
         try:
             orders = self.get_open_orders(symbol)
             sl_order = None
             tp_order = None
             
+            # Use normalized symbol for comparison
+            norm_target = normalize_symbol(symbol)
+            
+            # Debug logging to help diagnose order matching issues
+            if orders:
+                logger.debug("get_tp_sl_orders_for_position: Checking %d open orders for %s (normalized: %s). "
+                           "Types found: %s", len(orders), symbol, norm_target,
+                           [o.get('type') for o in orders])
+            
             for order in orders:
-                order_type = order.get('type', '')
+                # Normalize the order's symbol before comparing
+                order_symbol = order.get('symbol')
+                if not order_symbol or normalize_symbol(order_symbol) != norm_target:
+                    continue
+                
+                order_type = str(order.get('type', '')).upper()
                 is_reduce_only = order.get('reduceOnly', False)
                 
-                if is_reduce_only or order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET', 
-                                                     'stop_market', 'take_profit_market']:
-                    if order_type in ['STOP_MARKET', 'stop_market']:
+                # Check for stopPrice presence - Hyperliquid/Binance-flavor TP/SL detection
+                # Some exchanges use stopPrice even with generic order types
+                stop_price_val = order.get('stopPrice')
+                has_stop_price = False
+                if stop_price_val is not None:
+                    try:
+                        has_stop_price = float(stop_price_val) > 0
+                    except (ValueError, TypeError):
+                        # If stopPrice is not a valid number, treat as not having stop price
+                        pass
+                
+                # Identify TP/SL orders using multiple indicators:
+                # 1. reduceOnly flag
+                # 2. Specific order types (STOP_MARKET, TAKE_PROFIT_MARKET, etc.)
+                # 3. Presence of stopPrice
+                if is_reduce_only or has_stop_price or order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET',
+                                                                       'STOP', 'TAKE_PROFIT',
+                                                                       'STOP_LIMIT', 'TAKE_PROFIT_LIMIT']:
+                    # Determine if this is SL or TP based on order type
+                    if 'STOP' in order_type and 'TAKE_PROFIT' not in order_type:
                         sl_order = order
-                    elif order_type in ['TAKE_PROFIT_MARKET', 'take_profit_market']:
+                    elif 'TAKE_PROFIT' in order_type:
                         tp_order = order
+                    elif has_stop_price and is_reduce_only:
+                        # Fallback: if it has stopPrice and is reduceOnly but type is ambiguous,
+                        # we can't definitively say if it's SL or TP without more context.
+                        # Log for debugging but don't assign to avoid incorrect assignment.
+                        logger.debug("get_tp_sl_orders_for_position: Found reduce-only order with stopPrice "
+                                   "but ambiguous type '%s' for %s", order_type, symbol)
+            
+            # Debug: log if no matches found despite having orders
+            if orders and sl_order is None and tp_order is None:
+                logger.debug("get_tp_sl_orders_for_position: Checking %d open orders for %s. "
+                           "Types found: %s. reduceOnly flags: %s. stopPrices: %s",
+                           len(orders), symbol,
+                           [o.get('type') for o in orders],
+                           [o.get('reduceOnly') for o in orders],
+                           [o.get('stopPrice') for o in orders])
             
             return {'sl_order': sl_order, 'tp_order': tp_order}
         except Exception as e:
