@@ -321,6 +321,7 @@ class TestReconciliationSafetyCheck(unittest.TestCase):
         
         mock_config.TP_SL_QUANTITY_TOLERANCE = 0.01
         mock_config.RR_RATIO = 2.0
+        mock_config.TP_SL_PLACEMENT_COOLDOWN_SECONDS = 30  # Use the config constant
         
         # Create a mock client
         mock_client = MagicMock()

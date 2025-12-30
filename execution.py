@@ -611,7 +611,13 @@ class HyperliquidClient:
                 # Check for stopPrice presence - Hyperliquid/Binance-flavor TP/SL detection
                 # Some exchanges use stopPrice even with generic order types
                 stop_price_val = order.get('stopPrice')
-                has_stop_price = stop_price_val is not None and float(stop_price_val or 0) > 0
+                has_stop_price = False
+                if stop_price_val is not None:
+                    try:
+                        has_stop_price = float(stop_price_val) > 0
+                    except (ValueError, TypeError):
+                        # If stopPrice is not a valid number, treat as not having stop price
+                        pass
                 
                 # Identify TP/SL orders using multiple indicators:
                 # 1. reduceOnly flag
@@ -634,10 +640,12 @@ class HyperliquidClient:
             
             # Debug: log if no matches found despite having orders
             if orders and sl_order is None and tp_order is None:
-                print(f"DEBUG: Checking {len(orders)} open orders for {symbol}. "
-                      f"Types found: {[o.get('type') for o in orders]}. "
-                      f"reduceOnly flags: {[o.get('reduceOnly') for o in orders]}. "
-                      f"stopPrices: {[o.get('stopPrice') for o in orders]}")
+                logger.debug("get_tp_sl_orders_for_position: Checking %d open orders for %s. "
+                           "Types found: %s. reduceOnly flags: %s. stopPrices: %s",
+                           len(orders), symbol,
+                           [o.get('type') for o in orders],
+                           [o.get('reduceOnly') for o in orders],
+                           [o.get('stopPrice') for o in orders])
             
             return {'sl_order': sl_order, 'tp_order': tp_order}
         except Exception as e:

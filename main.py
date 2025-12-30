@@ -370,9 +370,9 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
                     last_placement = dt.datetime.fromisoformat(last_placement_str)
                     seconds_since_placement = (dt.datetime.now() - last_placement).total_seconds()
                     
-                    # If orders were placed within the last 30 seconds, skip this cycle
+                    # If orders were placed within the cooldown period, skip this cycle
                     # to allow the exchange API to reflect the changes
-                    if seconds_since_placement < 30:
+                    if seconds_since_placement < config.TP_SL_PLACEMENT_COOLDOWN_SECONDS:
                         logger.info("Skipping TP/SL placement for %s - orders placed %.1f seconds ago, "
                                    "waiting for API to sync", symbol, seconds_since_placement)
                         state.add_reconciliation_log("tp_sl_placement_deferred", {
