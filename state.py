@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 import datetime
 import json
 import os
+from utils import TP_SL_ORDER_TYPES
 
 # Configuration constants
 MAX_BALANCE_HISTORY_POINTS = 5000  # About 17 days at 5-minute intervals (enough for 2+ weeks)
@@ -241,10 +242,6 @@ def compute_position_tp_sl(symbol: str, exchange_open_orders: List[Dict]) -> Dic
     """
     take_profit = None
     stop_loss = None
-    tp_sl_types = {
-        'STOP', 'STOP_MARKET', 'STOP_LIMIT',
-        'TAKE_PROFIT', 'TAKE_PROFIT_MARKET', 'TAKE_PROFIT_LIMIT'
-    }
     
     for order in exchange_open_orders:
         if order.get('symbol') != symbol:
@@ -254,7 +251,7 @@ def compute_position_tp_sl(symbol: str, exchange_open_orders: List[Dict]) -> Dic
         is_reduce_only = _normalize_order_field(order, 'reduceOnly', 'reduce_only')
         
         # Check if it's a TP/SL order
-        if is_reduce_only or order_type in tp_sl_types:
+        if is_reduce_only or order_type in TP_SL_ORDER_TYPES:
             stop_price = _normalize_order_field(order, 'stopPrice', 'stop_price')
             if stop_price:
                 stop_price = float(stop_price)

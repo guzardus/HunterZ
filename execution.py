@@ -591,16 +591,12 @@ class HyperliquidClient:
         Returns:
             dict: {'sl_orders': [orders], 'tp_orders': [orders]}
         """
-        from utils import normalize_symbol
+        from utils import normalize_symbol, TP_SL_ORDER_TYPES
         
         try:
             orders = self.get_open_orders(symbol)
             sl_orders = []
             tp_orders = []
-            expanded_types = {
-                'STOP', 'STOP_MARKET', 'STOP_LIMIT',
-                'TAKE_PROFIT', 'TAKE_PROFIT_MARKET', 'TAKE_PROFIT_LIMIT'
-            }
             
             # Use normalized symbol for comparison
             norm_target = normalize_symbol(symbol)
@@ -635,7 +631,7 @@ class HyperliquidClient:
                 # 1. reduceOnly flag
                 # 2. Specific order types (STOP_MARKET, TAKE_PROFIT_MARKET, etc.)
                 # 3. Presence of stopPrice
-                is_tp_sl_candidate = is_reduce_only or has_stop_price or order_type in expanded_types
+                is_tp_sl_candidate = is_reduce_only or has_stop_price or order_type in TP_SL_ORDER_TYPES
                 if is_tp_sl_candidate:
                     # Determine if this is SL or TP based on order type
                     if 'STOP' in order_type and 'TAKE_PROFIT' not in order_type:
