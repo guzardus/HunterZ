@@ -151,13 +151,13 @@ class TestTPSLExecutionFlow(unittest.TestCase):
         # Get TP/SL orders
         result = client.get_tp_sl_orders_for_position('BTC/USDT')
         
-        # Verify correct orders were identified
-        self.assertIsNotNone(result['sl_order'])
-        self.assertIsNotNone(result['tp_order'])
-        self.assertEqual(result['sl_order']['id'], 'sl_order_1')
-        self.assertEqual(result['tp_order']['id'], 'tp_order_1')
-        self.assertEqual(result['sl_order']['stopPrice'], 43000.0)
-        self.assertEqual(result['tp_order']['stopPrice'], 49000.0)
+        # Verify correct orders were identified (now returns lists)
+        self.assertEqual(len(result['sl_orders']), 1)
+        self.assertEqual(len(result['tp_orders']), 1)
+        self.assertEqual(result['sl_orders'][0]['id'], 'sl_order_1')
+        self.assertEqual(result['tp_orders'][0]['id'], 'tp_order_1')
+        self.assertEqual(result['sl_orders'][0]['stopPrice'], 43000.0)
+        self.assertEqual(result['tp_orders'][0]['stopPrice'], 49000.0)
     
     @patch('execution.ccxt.binance')
     def test_get_tp_sl_orders_missing_sl(self, mock_binance_class):
@@ -183,10 +183,10 @@ class TestTPSLExecutionFlow(unittest.TestCase):
         # Get TP/SL orders
         result = client.get_tp_sl_orders_for_position('BTC/USDT')
         
-        # Verify SL is None and TP is present
-        self.assertIsNone(result['sl_order'])
-        self.assertIsNotNone(result['tp_order'])
-        self.assertEqual(result['tp_order']['id'], 'tp_order_1')
+        # Verify SL is empty list and TP has one order (now returns lists)
+        self.assertEqual(len(result['sl_orders']), 0)
+        self.assertEqual(len(result['tp_orders']), 1)
+        self.assertEqual(result['tp_orders'][0]['id'], 'tp_order_1')
     
     @patch('execution.ccxt.binance')
     def test_get_tp_sl_orders_missing_tp(self, mock_binance_class):
@@ -212,10 +212,10 @@ class TestTPSLExecutionFlow(unittest.TestCase):
         # Get TP/SL orders
         result = client.get_tp_sl_orders_for_position('BTC/USDT')
         
-        # Verify TP is None and SL is present
-        self.assertIsNotNone(result['sl_order'])
-        self.assertIsNone(result['tp_order'])
-        self.assertEqual(result['sl_order']['id'], 'sl_order_1')
+        # Verify TP is empty list and SL has one order (now returns lists)
+        self.assertEqual(len(result['sl_orders']), 1)
+        self.assertEqual(len(result['tp_orders']), 0)
+        self.assertEqual(result['sl_orders'][0]['id'], 'sl_order_1')
     
     @patch('execution.ccxt.binance')
     def test_cancel_and_replace_tp_sl_on_quantity_mismatch(self, mock_binance_class):

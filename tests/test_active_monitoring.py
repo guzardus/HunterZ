@@ -198,10 +198,10 @@ class TestActiveMonitoring(unittest.TestCase):
             }
         }
         
-        # Mock existing orders
+        # Mock existing orders (now returns lists)
         self.mock_client.get_tp_sl_orders_for_position.return_value = {
-            'sl_order': {'id': 'sl_123'},
-            'tp_order': {'id': 'tp_456'}
+            'sl_orders': [{'id': 'sl_123'}],
+            'tp_orders': [{'id': 'tp_456'}]
         }
         
         monitor_and_close_positions(self.mock_client)
