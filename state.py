@@ -241,6 +241,10 @@ def compute_position_tp_sl(symbol: str, exchange_open_orders: List[Dict]) -> Dic
     """
     take_profit = None
     stop_loss = None
+    tp_sl_types = {
+        'STOP', 'STOP_MARKET', 'STOP_LIMIT',
+        'TAKE_PROFIT', 'TAKE_PROFIT_MARKET', 'TAKE_PROFIT_LIMIT'
+    }
     
     for order in exchange_open_orders:
         if order.get('symbol') != symbol:
@@ -250,14 +254,14 @@ def compute_position_tp_sl(symbol: str, exchange_open_orders: List[Dict]) -> Dic
         is_reduce_only = _normalize_order_field(order, 'reduceOnly', 'reduce_only')
         
         # Check if it's a TP/SL order
-        if is_reduce_only or order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET']:
+        if is_reduce_only or order_type in tp_sl_types:
             stop_price = _normalize_order_field(order, 'stopPrice', 'stop_price')
             if stop_price:
                 stop_price = float(stop_price)
                 
-                if order_type == 'STOP_MARKET':
+                if 'STOP' in order_type and 'TAKE_PROFIT' not in order_type:
                     stop_loss = stop_price
-                elif order_type == 'TAKE_PROFIT_MARKET':
+                elif 'TAKE_PROFIT' in order_type:
                     take_profit = stop_price
     
     return {'take_profit': take_profit, 'stop_loss': stop_loss}

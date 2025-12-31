@@ -445,11 +445,19 @@ class HyperliquidClient:
         import state  # Import here to avoid circular imports
         
         sl_tp_side = 'sell' if side == 'buy' else 'buy'
+
+        def _select_matching_order(candidates, target_price, target_qty):
+            if not candidates:
+                return None
+            for candidate in candidates:
+                if order_matches_target(candidate, target_price, target_qty, qty_tol=config.TP_SL_QUANTITY_TOLERANCE):
+                    return candidate
+            return candidates[0]
         
         # Check for existing matching orders first
         existing_tp_sl = self.get_tp_sl_orders_for_position(symbol)
-        existing_sl = existing_tp_sl.get('sl_order')
-        existing_tp = existing_tp_sl.get('tp_order')
+        existing_sl = _select_matching_order(existing_tp_sl.get('sl_orders', []), sl_price, amount)
+        existing_tp = _select_matching_order(existing_tp_sl.get('tp_orders', []), tp_price, amount)
 
         # Use cached exchange_open_orders as a secondary source to avoid duplicates when API lags
         state_reduce_orders = None
@@ -581,14 +589,18 @@ class HyperliquidClient:
             symbol: Trading symbol to check for TP/SL orders
             
         Returns:
-            dict: {'sl_order': order or None, 'tp_order': order or None}
+            dict: {'sl_orders': [orders], 'tp_orders': [orders]}
         """
         from utils import normalize_symbol
         
         try:
             orders = self.get_open_orders(symbol)
-            sl_order = None
-            tp_order = None
+            sl_orders = []
+            tp_orders = []
+            expanded_types = {
+                'STOP', 'STOP_MARKET', 'STOP_LIMIT',
+                'TAKE_PROFIT', 'TAKE_PROFIT_MARKET', 'TAKE_PROFIT_LIMIT'
+            }
             
             # Use normalized symbol for comparison
             norm_target = normalize_symbol(symbol)
@@ -606,11 +618,11 @@ class HyperliquidClient:
                     continue
                 
                 order_type = str(order.get('type', '')).upper()
-                is_reduce_only = order.get('reduceOnly', False)
+                is_reduce_only = order.get('reduceOnly', order.get('reduce_only', False))
                 
                 # Check for stopPrice presence - Hyperliquid/Binance-flavor TP/SL detection
                 # Some exchanges use stopPrice even with generic order types
-                stop_price_val = order.get('stopPrice')
+                stop_price_val = order.get('stopPrice', order.get('stop_price'))
                 has_stop_price = False
                 if stop_price_val is not None:
                     try:
@@ -623,23 +635,21 @@ class HyperliquidClient:
                 # 1. reduceOnly flag
                 # 2. Specific order types (STOP_MARKET, TAKE_PROFIT_MARKET, etc.)
                 # 3. Presence of stopPrice
-                if is_reduce_only or has_stop_price or order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET',
-                                                                       'STOP', 'TAKE_PROFIT',
-                                                                       'STOP_LIMIT', 'TAKE_PROFIT_LIMIT']:
+                is_tp_sl_candidate = is_reduce_only or has_stop_price or order_type in expanded_types
+                if is_tp_sl_candidate:
                     # Determine if this is SL or TP based on order type
                     if 'STOP' in order_type and 'TAKE_PROFIT' not in order_type:
-                        sl_order = order
+                        sl_orders.append(order)
                     elif 'TAKE_PROFIT' in order_type:
-                        tp_order = order
-                    elif has_stop_price and is_reduce_only:
-                        # Fallback: if it has stopPrice and is reduceOnly but type is ambiguous,
-                        # we can't definitively say if it's SL or TP without more context.
-                        # Log for debugging but don't assign to avoid incorrect assignment.
-                        logger.debug("get_tp_sl_orders_for_position: Found reduce-only order with stopPrice "
-                                   "but ambiguous type '%s' for %s", order_type, symbol)
+                        tp_orders.append(order)
+                    elif has_stop_price:
+                        # Fallback: if it has stopPrice but type is ambiguous,
+                        # log for debugging but keep for reconciliation
+                        logger.debug("get_tp_sl_orders_for_position: Ambiguous reduce-only/stopPrice order "
+                                     "type '%s' for %s", order_type, symbol)
             
             # Debug: log if no matches found despite having orders
-            if orders and sl_order is None and tp_order is None:
+            if orders and not sl_orders and not tp_orders:
                 logger.debug("get_tp_sl_orders_for_position: Checking %d open orders for %s. "
                            "Types found: %s. reduceOnly flags: %s. stopPrices: %s",
                            len(orders), symbol,
@@ -647,10 +657,10 @@ class HyperliquidClient:
                            [o.get('reduceOnly') for o in orders],
                            [o.get('stopPrice') for o in orders])
             
-            return {'sl_order': sl_order, 'tp_order': tp_order}
+            return {'sl_orders': sl_orders, 'tp_orders': tp_orders}
         except Exception as e:
             print(f"Error getting TP/SL orders for {symbol}: {e}")
-            return {'sl_order': None, 'tp_order': None}
+            return {'sl_orders': [], 'tp_orders': []}
     
     def cancel_order(self, symbol, order_id):
         """Cancel a specific order.
