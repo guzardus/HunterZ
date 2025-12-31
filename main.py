@@ -273,8 +273,6 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         sl_orders = tp_sl_orders.get('sl_orders', [])
         tp_orders = tp_sl_orders.get('tp_orders', [])
         ambiguous_orders = tp_sl_orders.get('ambiguous_orders', [])
-        sl_orders = sl_orders + ambiguous_orders
-        tp_orders = tp_orders + ambiguous_orders
         
         # Determine TP/SL prices
         sl_price = None
@@ -320,6 +318,15 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
             except (TypeError, ValueError):
                 return 0.0
 
+        for order in ambiguous_orders:
+            price_val = _extract_order_price(order)
+            sl_diff = abs(price_val - float(sl_price))
+            tp_diff = abs(price_val - float(tp_price))
+            if tp_diff < sl_diff:
+                tp_orders.append(order)
+            else:
+                sl_orders.append(order)
+
         def _filter_reduce_only(order_list, label):
             """Ensure orders are reduce-only, cancel unsafe ones."""
             valid = []
@@ -352,7 +359,7 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
                 return None
             best = next(
                 (o for o in active_orders if order_matches_target(
-                    o, target_price, formatted_size,
+                    o, target_price=target_price, target_qty=formatted_size,
                     qty_tol=config.TP_SL_QUANTITY_TOLERANCE)),
                 None
             )
@@ -363,7 +370,7 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
                 )
             best_id = best.get('id')
             for order in active_orders:
-                if ((best_id is not None and order.get('id') == best_id) or order is best):
+                if ((best_id is not None and order.get('id') == best_id) or (best_id is None and order is best)):
                     continue
                 oid = order.get('id')
                 print(f"Cancelling redundant {label} order {oid} for {symbol}")
@@ -382,7 +389,7 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         def _validate_order(best_order, target_price, label):
             if not best_order:
                 return None, True
-            if order_matches_target(best_order, target_price, formatted_size,
+            if order_matches_target(best_order, target_price=target_price, target_qty=formatted_size,
                                     qty_tol=config.TP_SL_QUANTITY_TOLERANCE):
                 return best_order, False
             oid = best_order.get('id')
