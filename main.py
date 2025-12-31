@@ -345,7 +345,12 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
                 best = order_list[0]
             best_id = best.get('id')
             for order in order_list:
-                if order.get('id') == best_id:
+                same_order = False
+                if best_id is not None and order.get('id') == best_id:
+                    same_order = True
+                elif order is best:
+                    same_order = True
+                if same_order:
                     continue
                 oid = order.get('id')
                 print(f"Cancelling redundant {label} order {oid} for {symbol}")

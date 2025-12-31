@@ -640,9 +640,10 @@ class HyperliquidClient:
                         tp_orders.append(order)
                     elif has_stop_price:
                         # Fallback: if it has stopPrice but type is ambiguous,
-                        # log for debugging but keep for reconciliation
+                        # log for debugging and treat as SL for reconciliation coverage
                         logger.debug("get_tp_sl_orders_for_position: Ambiguous reduce-only/stopPrice order "
                                      "type '%s' for %s", order_type, symbol)
+                        sl_orders.append(order)
             
             # Debug: log if no matches found despite having orders
             if orders and not sl_orders and not tp_orders:
