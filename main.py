@@ -272,6 +272,9 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
         sl_orders = tp_sl_orders.get('sl_orders', [])
         tp_orders = tp_sl_orders.get('tp_orders', [])
+        ambiguous_orders = tp_sl_orders.get('ambiguous_orders', [])
+        sl_orders = sl_orders + ambiguous_orders
+        tp_orders = tp_orders + ambiguous_orders
         
         # Determine TP/SL prices
         sl_price = None
@@ -309,18 +312,29 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         
         # Format position size with proper precision
         formatted_size = float(client.exchange.amount_to_precision(symbol, position_size))
+        cancelled_ids = set()
+
+        def _extract_order_price(order):
+            try:
+                return float(order.get('stopPrice') or order.get('price') or 0)
+            except (TypeError, ValueError):
+                return 0.0
 
         def _filter_reduce_only(order_list, label):
             """Ensure orders are reduce-only, cancel unsafe ones."""
             valid = []
             for order in order_list:
                 reduce_only = order.get('reduceOnly', order.get('reduce_only', False))
+                oid = order.get('id')
+                if oid and oid in cancelled_ids:
+                    continue
                 if reduce_only:
                     valid.append(order)
                 else:
-                    oid = order.get('id')
                     print(f"⚠ {label} order {oid} for {symbol} is not reduce-only, cancelling")
                     client.cancel_order(symbol, oid)
+                    if oid:
+                        cancelled_ids.add(oid)
                     state.add_reconciliation_log(f"{label.lower()}_not_reduce_only", {
                         "symbol": symbol,
                         "order_id": oid,
@@ -333,28 +347,29 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
 
         def _dedupe_and_select(order_list, target_price, label):
             """Select best matching order and cancel redundant ones."""
-            if not order_list:
+            active_orders = [o for o in order_list if o.get('id') not in cancelled_ids]
+            if not active_orders:
                 return None
             best = next(
-                (o for o in order_list if order_matches_target(
+                (o for o in active_orders if order_matches_target(
                     o, target_price, formatted_size,
                     qty_tol=config.TP_SL_QUANTITY_TOLERANCE)),
                 None
             )
             if not best:
-                best = order_list[0]
+                best = min(
+                    active_orders,
+                    key=lambda o: abs(_extract_order_price(o) - float(target_price))
+                )
             best_id = best.get('id')
-            for order in order_list:
-                same_order = False
-                if best_id is not None and order.get('id') == best_id:
-                    same_order = True
-                elif order is best:
-                    same_order = True
-                if same_order:
+            for order in active_orders:
+                if ((best_id is not None and order.get('id') == best_id) or order is best):
                     continue
                 oid = order.get('id')
                 print(f"Cancelling redundant {label} order {oid} for {symbol}")
                 client.cancel_order(symbol, oid)
+                if oid:
+                    cancelled_ids.add(oid)
             return best
 
         sl_order = _dedupe_and_select(sl_orders, sl_price, "SL")
@@ -373,6 +388,8 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
             oid = best_order.get('id')
             print(f"⚠ {label} order {oid} for {symbol} mismatched target, cancelling")
             client.cancel_order(symbol, oid)
+            if oid:
+                cancelled_ids.add(oid)
             state.add_reconciliation_log(f"{label.lower()}_mismatch", {
                 "symbol": symbol,
                 "expected_size": formatted_size,

@@ -597,6 +597,13 @@ class HyperliquidClient:
             orders = self.get_open_orders(symbol)
             sl_orders = []
             tp_orders = []
+            ambiguous_orders = []
+
+            def _get_reduce_only(order):
+                return order.get('reduceOnly', order.get('reduce_only', False))
+
+            def _get_stop_price(order):
+                return order.get('stopPrice', order.get('stop_price'))
             
             # Use normalized symbol for comparison
             norm_target = normalize_symbol(symbol)
@@ -614,11 +621,11 @@ class HyperliquidClient:
                     continue
                 
                 order_type = str(order.get('type', '')).upper()
-                is_reduce_only = order.get('reduceOnly', order.get('reduce_only', False))
+                is_reduce_only = _get_reduce_only(order)
                 
                 # Check for stopPrice presence - Hyperliquid/Binance-flavor TP/SL detection
                 # Some exchanges use stopPrice even with generic order types
-                stop_price_val = order.get('stopPrice', order.get('stop_price'))
+                stop_price_val = _get_stop_price(order)
                 has_stop_price = False
                 if stop_price_val is not None:
                     try:
@@ -640,10 +647,10 @@ class HyperliquidClient:
                         tp_orders.append(order)
                     elif has_stop_price:
                         # Fallback: if it has stopPrice but type is ambiguous,
-                        # log for debugging and treat as SL for reconciliation coverage
+                        # log for debugging and track separately for reconciliation coverage
                         logger.debug("get_tp_sl_orders_for_position: Ambiguous reduce-only/stopPrice order "
                                      "type '%s' for %s", order_type, symbol)
-                        sl_orders.append(order)
+                        ambiguous_orders.append(order)
             
             # Debug: log if no matches found despite having orders
             if orders and not sl_orders and not tp_orders:
@@ -654,10 +661,10 @@ class HyperliquidClient:
                            [o.get('reduceOnly') for o in orders],
                            [o.get('stopPrice') for o in orders])
             
-            return {'sl_orders': sl_orders, 'tp_orders': tp_orders}
+            return {'sl_orders': sl_orders, 'tp_orders': tp_orders, 'ambiguous_orders': ambiguous_orders}
         except Exception as e:
             print(f"Error getting TP/SL orders for {symbol}: {e}")
-            return {'sl_orders': [], 'tp_orders': []}
+            return {'sl_orders': [], 'tp_orders': [], 'ambiguous_orders': []}
     
     def cancel_order(self, symbol, order_id):
         """Cancel a specific order.
