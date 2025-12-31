@@ -253,7 +253,8 @@ def compute_position_tp_sl(symbol: str, exchange_open_orders: List[Dict]) -> Dic
         # Check if it's a TP/SL order
         if is_reduce_only or is_sl_type or is_tp_type:
             stop_price = _normalize_order_field(order, 'stopPrice', 'stop_price')
-            # For limit orders, also check the regular price field
+            # For limit orders (e.g., STOP_LIMIT, TAKE_PROFIT_LIMIT), the trigger price
+            # is in stopPrice, but if not present, fall back to the order price
             if not stop_price:
                 stop_price = order.get('price')
             

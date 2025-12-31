@@ -9,8 +9,8 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import state
 import order_utils
+import state
 from main import reconcile_position_tp_sl
 
 
