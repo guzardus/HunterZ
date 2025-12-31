@@ -258,8 +258,9 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
     
     This function:
     1. Checks if position has TP/SL orders
-    2. Verifies TP/SL quantities match position size
-    3. Places missing TP/SL orders or replaces mismatched ones
+    2. Handles multiple duplicate orders by keeping only the matching one
+    3. Verifies TP/SL quantities match position size
+    4. Places missing TP/SL orders or replaces mismatched ones
     
     Args:
         client: BinanceClient instance
@@ -290,10 +291,10 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
             print(f"Skipping TP/SL reconciliation for {symbol} due to backoff ({int(remaining)}s)")
             return False
         
-        # Get existing TP/SL orders
+        # Get existing TP/SL orders (now returns lists)
         tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
-        sl_order = tp_sl_orders['sl_order']
-        tp_order = tp_sl_orders['tp_order']
+        sl_orders = tp_sl_orders['sl_orders']
+        tp_orders = tp_sl_orders['tp_orders']
         
         # Determine TP/SL prices
         sl_price = None
@@ -328,11 +329,14 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         # Format position size with proper precision
         formatted_size = float(client.exchange.amount_to_precision(symbol, position_size))
         
-        # Check if TP/SL orders need to be placed or replaced
-        needs_sl = False
-        needs_tp = False
+        # Get tick size for price comparison
+        tick_size = order_utils.fetch_symbol_tick_size(client, symbol)
         
-        if not sl_order:
+        # Handle SL orders - deduplicate if multiple exist
+        needs_sl = False
+        sl_order_to_keep = None
+        
+        if not sl_orders:
             print(f"⚠ Missing SL order for {symbol} ({side})")
             needs_sl = True
             state.add_reconciliation_log("missing_sl_detected", {
@@ -340,20 +344,56 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
                 "position_size": position_size,
                 "message": f"Position exists without SL order"
             })
+        elif len(sl_orders) > 1:
+            # Multiple SL orders detected - find matching one and cancel duplicates
+            print(f"⚠ Found {len(sl_orders)} SL orders for {symbol} - deduplicating...")
+            
+            for order in sl_orders:
+                if order_utils.order_matches_target(order, sl_price, formatted_size, tick_size, config.TP_SL_QUANTITY_TOLERANCE):
+                    sl_order_to_keep = order
+                    print(f"  ✓ Keeping matching SL order {order['id']}")
+                    break
+            
+            # Cancel all duplicate SL orders except the one we're keeping
+            cancelled_count = 0
+            for order in sl_orders:
+                if sl_order_to_keep and order['id'] == sl_order_to_keep['id']:
+                    continue  # Keep this one
+                print(f"  ✗ Cancelling duplicate SL order {order['id']}")
+                if client.cancel_order(symbol, order['id']):
+                    cancelled_count += 1
+            
+            state.add_reconciliation_log("sl_duplicates_removed", {
+                "symbol": symbol,
+                "cancelled_count": cancelled_count,
+                "kept_order": sl_order_to_keep['id'] if sl_order_to_keep else None,
+                "message": f"Cancelled {cancelled_count} duplicate SL orders"
+            })
+            
+            # If no matching order was found, need to place new one
+            if not sl_order_to_keep:
+                print(f"  ⚠ No matching SL order found, will place new one")
+                needs_sl = True
         else:
-            sl_amount = float(sl_order.get('amount', 0))
-            if abs(sl_amount - formatted_size) > formatted_size * config.TP_SL_QUANTITY_TOLERANCE:
-                print(f"⚠ SL quantity mismatch for {symbol} ({side}): {sl_amount} vs {formatted_size}")
+            # Single SL order - check if it matches
+            sl_order = sl_orders[0]
+            if not order_utils.order_matches_target(sl_order, sl_price, formatted_size, tick_size, config.TP_SL_QUANTITY_TOLERANCE):
+                sl_amount = float(sl_order.get('amount', 0))
+                print(f"⚠ SL order mismatch for {symbol} ({side}): amount {sl_amount} vs {formatted_size}")
                 needs_sl = True
                 client.cancel_order(symbol, sl_order['id'])
-                state.add_reconciliation_log("sl_quantity_mismatch", {
+                state.add_reconciliation_log("sl_mismatch", {
                     "symbol": symbol,
-                    "expected": formatted_size,
-                    "actual": sl_amount,
-                    "message": f"SL order quantity mismatch, cancelling"
+                    "expected_size": formatted_size,
+                    "actual_size": sl_amount,
+                    "message": f"SL order mismatch, cancelling"
                 })
         
-        if not tp_order:
+        # Handle TP orders - deduplicate if multiple exist
+        needs_tp = False
+        tp_order_to_keep = None
+        
+        if not tp_orders:
             print(f"⚠ Missing TP order for {symbol} ({side})")
             needs_tp = True
             state.add_reconciliation_log("missing_tp_detected", {
@@ -361,17 +401,49 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
                 "position_size": position_size,
                 "message": f"Position exists without TP order"
             })
+        elif len(tp_orders) > 1:
+            # Multiple TP orders detected - find matching one and cancel duplicates
+            print(f"⚠ Found {len(tp_orders)} TP orders for {symbol} - deduplicating...")
+            
+            for order in tp_orders:
+                if order_utils.order_matches_target(order, tp_price, formatted_size, tick_size, config.TP_SL_QUANTITY_TOLERANCE):
+                    tp_order_to_keep = order
+                    print(f"  ✓ Keeping matching TP order {order['id']}")
+                    break
+            
+            # Cancel all duplicate TP orders except the one we're keeping
+            cancelled_count = 0
+            for order in tp_orders:
+                if tp_order_to_keep and order['id'] == tp_order_to_keep['id']:
+                    continue  # Keep this one
+                print(f"  ✗ Cancelling duplicate TP order {order['id']}")
+                if client.cancel_order(symbol, order['id']):
+                    cancelled_count += 1
+            
+            state.add_reconciliation_log("tp_duplicates_removed", {
+                "symbol": symbol,
+                "cancelled_count": cancelled_count,
+                "kept_order": tp_order_to_keep['id'] if tp_order_to_keep else None,
+                "message": f"Cancelled {cancelled_count} duplicate TP orders"
+            })
+            
+            # If no matching order was found, need to place new one
+            if not tp_order_to_keep:
+                print(f"  ⚠ No matching TP order found, will place new one")
+                needs_tp = True
         else:
-            tp_amount = float(tp_order.get('amount', 0))
-            if abs(tp_amount - formatted_size) > formatted_size * config.TP_SL_QUANTITY_TOLERANCE:
-                print(f"⚠ TP quantity mismatch for {symbol} ({side}): {tp_amount} vs {formatted_size}")
+            # Single TP order - check if it matches
+            tp_order = tp_orders[0]
+            if not order_utils.order_matches_target(tp_order, tp_price, formatted_size, tick_size, config.TP_SL_QUANTITY_TOLERANCE):
+                tp_amount = float(tp_order.get('amount', 0))
+                print(f"⚠ TP order mismatch for {symbol} ({side}): amount {tp_amount} vs {formatted_size}")
                 needs_tp = True
                 client.cancel_order(symbol, tp_order['id'])
-                state.add_reconciliation_log("tp_quantity_mismatch", {
+                state.add_reconciliation_log("tp_mismatch", {
                     "symbol": symbol,
-                    "expected": formatted_size,
-                    "actual": tp_amount,
-                    "message": f"TP order quantity mismatch, cancelling"
+                    "expected_size": formatted_size,
+                    "actual_size": tp_amount,
+                    "message": f"TP order mismatch, cancelling"
                 })
         
         if needs_sl or needs_tp:
@@ -450,10 +522,17 @@ def reconcile_existing_positions_with_trades(client):
                 tp_price = None
                 sl_price = None
                 
-                if tp_sl_orders and tp_sl_orders.get('tp_order'):
-                    tp_price = float(tp_sl_orders['tp_order'].get('stopPrice', 0) or 0)
-                if tp_sl_orders and tp_sl_orders.get('sl_order'):
-                    sl_price = float(tp_sl_orders['sl_order'].get('stopPrice', 0) or 0)
+                # Get first TP order if available
+                tp_orders = tp_sl_orders.get('tp_orders', [])
+                if tp_orders:
+                    # Get stopPrice or price from first TP order
+                    tp_price = float(tp_orders[0].get('stopPrice') or tp_orders[0].get('price', 0) or 0)
+                
+                # Get first SL order if available
+                sl_orders = tp_sl_orders.get('sl_orders', [])
+                if sl_orders:
+                    # Get stopPrice or price from first SL order
+                    sl_price = float(sl_orders[0].get('stopPrice') or sl_orders[0].get('price', 0) or 0)
                 
                 state.add_trade({
                     'symbol': symbol,
@@ -645,11 +724,13 @@ def monitor_and_close_positions(client):
                     # Cancel existing TP/SL orders first
                     tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
                     cancelled_orders = []
-                    if tp_sl_orders.get('sl_order'):
-                        if client.cancel_order(symbol, tp_sl_orders['sl_order']['id']):
+                    # Cancel all SL orders
+                    for sl_order in tp_sl_orders.get('sl_orders', []):
+                        if client.cancel_order(symbol, sl_order['id']):
                             cancelled_orders.append('SL')
-                    if tp_sl_orders.get('tp_order'):
-                        if client.cancel_order(symbol, tp_sl_orders['tp_order']['id']):
+                    # Cancel all TP orders
+                    for tp_order in tp_sl_orders.get('tp_orders', []):
+                        if client.cancel_order(symbol, tp_order['id']):
                             cancelled_orders.append('TP')
                     
                     # Close position with market order

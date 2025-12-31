@@ -224,8 +224,9 @@ def _normalize_order_field(order: Dict, field_name: str, fallback_name: str = No
 def compute_position_tp_sl(symbol: str, exchange_open_orders: List[Dict]) -> Dict:
     """Compute TP/SL for a position by deriving from exchange open orders.
     
-    This function looks for STOP_MARKET and TAKE_PROFIT_MARKET orders
-    that match the symbol and extracts their stop prices.
+    This function looks for STOP_MARKET, STOP_LIMIT, STOP, TAKE_PROFIT_MARKET,
+    TAKE_PROFIT_LIMIT, and TAKE_PROFIT orders that match the symbol and
+    extracts their stop prices.
     
     Args:
         symbol: Trading symbol
@@ -244,15 +245,24 @@ def compute_position_tp_sl(symbol: str, exchange_open_orders: List[Dict]) -> Dic
         order_type = order.get('type', '').upper()
         is_reduce_only = _normalize_order_field(order, 'reduceOnly', 'reduce_only')
         
+        # Detect SL orders: STOP_MARKET, STOP_LIMIT, STOP
+        # Detect TP orders: TAKE_PROFIT_MARKET, TAKE_PROFIT_LIMIT, TAKE_PROFIT
+        is_sl_type = order_type in ['STOP_MARKET', 'STOP_LIMIT', 'STOP']
+        is_tp_type = order_type in ['TAKE_PROFIT_MARKET', 'TAKE_PROFIT_LIMIT', 'TAKE_PROFIT']
+        
         # Check if it's a TP/SL order
-        if is_reduce_only or order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET']:
+        if is_reduce_only or is_sl_type or is_tp_type:
             stop_price = _normalize_order_field(order, 'stopPrice', 'stop_price')
+            # For limit orders, also check the regular price field
+            if not stop_price:
+                stop_price = order.get('price')
+            
             if stop_price:
                 stop_price = float(stop_price)
                 
-                if order_type == 'STOP_MARKET':
+                if is_sl_type:
                     stop_loss = stop_price
-                elif order_type == 'TAKE_PROFIT_MARKET':
+                elif is_tp_type:
                     take_profit = stop_price
     
     return {'take_profit': take_profit, 'stop_loss': stop_loss}

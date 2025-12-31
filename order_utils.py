@@ -219,6 +219,42 @@ def place_market_reduce_only(client, symbol, amount, side, reason="fallback"):
         return None
 
 
+def order_matches_target(order, target_price, target_amount, tick_size, amount_tolerance=0.01):
+    """Check if an order matches the target price and amount.
+    
+    Args:
+        order: Order dictionary from exchange
+        target_price: Expected price for the order
+        target_amount: Expected amount for the order
+        tick_size: Minimum price increment for the symbol
+        amount_tolerance: Tolerance for amount matching (default 1%)
+        
+    Returns:
+        bool: True if order matches target within tolerances
+    """
+    if not order:
+        return False
+    
+    # Get order price - check both stopPrice and price fields
+    order_price = order.get('stopPrice') or order.get('stop_price') or order.get('price')
+    if not order_price:
+        return False
+    
+    try:
+        order_price = float(order_price)
+        order_amount = float(order.get('amount', 0))
+        
+        # Check if price matches within tick tolerance
+        price_matches = prices_are_equal(order_price, target_price, tick_size)
+        
+        # Check if amount matches within tolerance
+        amount_matches = abs(order_amount - target_amount) <= target_amount * amount_tolerance
+        
+        return price_matches and amount_matches
+    except (TypeError, ValueError):
+        return False
+
+
 def safe_place_tp_sl(client, symbol, is_long, amount, computed_tp, computed_sl, *, cfg=config):
     """Place TP/SL with price pre-checks, rounding, buffer and fallback."""
     in_backoff, remaining = check_backoff(symbol)

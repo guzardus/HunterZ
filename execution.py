@@ -334,32 +334,36 @@ class BinanceClient:
             symbol: Trading symbol to check for TP/SL orders
             
         Returns:
-            dict: {'sl_order': order or None, 'tp_order': order or None}
+            dict: {'sl_orders': list of SL orders, 'tp_orders': list of TP orders}
         """
         try:
             resolved_symbol = self._resolve_symbol(symbol)
             orders = self.get_open_orders(resolved_symbol)
-            sl_order = None
-            tp_order = None
+            sl_orders = []
+            tp_orders = []
             
             for order in orders:
                 order_symbol = order.get('symbol')
                 if order_symbol not in (symbol, resolved_symbol):
                     continue
-                order_type = order.get('type', '')
+                order_type = order.get('type', '').upper()
                 is_reduce_only = order.get('reduceOnly', False)
                 
-                if is_reduce_only or order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET', 
-                                                     'stop_market', 'take_profit_market']:
-                    if order_type in ['STOP_MARKET', 'stop_market']:
-                        sl_order = order
-                    elif order_type in ['TAKE_PROFIT_MARKET', 'take_profit_market']:
-                        tp_order = order
+                # Detect SL orders: STOP_MARKET, STOP_LIMIT, STOP, or reduceOnly
+                # Detect TP orders: TAKE_PROFIT_MARKET, TAKE_PROFIT_LIMIT, TAKE_PROFIT, or reduceOnly
+                is_sl_type = order_type in ['STOP_MARKET', 'STOP_LIMIT', 'STOP']
+                is_tp_type = order_type in ['TAKE_PROFIT_MARKET', 'TAKE_PROFIT_LIMIT', 'TAKE_PROFIT']
+                
+                if is_reduce_only or is_sl_type or is_tp_type:
+                    if is_sl_type:
+                        sl_orders.append(order)
+                    elif is_tp_type:
+                        tp_orders.append(order)
             
-            return {'sl_order': sl_order, 'tp_order': tp_order}
+            return {'sl_orders': sl_orders, 'tp_orders': tp_orders}
         except Exception as e:
             print(f"Error getting TP/SL orders for {symbol}: {e}")
-            return {'sl_order': None, 'tp_order': None}
+            return {'sl_orders': [], 'tp_orders': []}
     
     @rate_limit_guard
     def cancel_order(self, symbol, order_id):
