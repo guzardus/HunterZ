@@ -28,7 +28,7 @@ class TestActiveMonitoring(unittest.TestCase):
         self.mock_client = Mock()
         self.mock_client.exchange = Mock()
         self.mock_client.exchange.amount_to_precision = Mock(side_effect=lambda s, a: a)
-        self.mock_client.get_tp_sl_orders_for_position = Mock(return_value={'sl_order': None, 'tp_order': None})
+        self.mock_client.get_tp_sl_orders_for_position = Mock(return_value={'sl_orders': [], 'tp_orders': []})
         self.mock_client.cancel_order = Mock(return_value=True)
         self.mock_client.close_position_market = Mock(return_value={'id': '12345'})
     
@@ -200,8 +200,8 @@ class TestActiveMonitoring(unittest.TestCase):
         
         # Mock existing orders
         self.mock_client.get_tp_sl_orders_for_position.return_value = {
-            'sl_order': {'id': 'sl_123'},
-            'tp_order': {'id': 'tp_456'}
+            'sl_orders': [{'id': 'sl_123'}],
+            'tp_orders': [{'id': 'tp_456'}]
         }
         
         monitor_and_close_positions(self.mock_client)

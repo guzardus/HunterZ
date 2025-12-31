@@ -5,7 +5,7 @@ import utils
 import lux_algo
 import risk_manager
 import state
-from execution import HyperliquidClient
+from execution import HyperliquidClient, order_matches_target
 import threading
 import logging
 
@@ -270,8 +270,9 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         
         # Get existing TP/SL orders
         tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
-        sl_order = tp_sl_orders['sl_order']
-        tp_order = tp_sl_orders['tp_order']
+        sl_orders = tp_sl_orders.get('sl_orders', [])
+        tp_orders = tp_sl_orders.get('tp_orders', [])
+        ambiguous_orders = tp_sl_orders.get('ambiguous_orders', [])
         
         # Determine TP/SL prices
         sl_price = None
@@ -309,54 +310,120 @@ def reconcile_position_tp_sl(client, symbol, position, pending_order=None):
         
         # Format position size with proper precision
         formatted_size = float(client.exchange.amount_to_precision(symbol, position_size))
+        cancelled_ids = set()
+
+        def _extract_order_price(order):
+            try:
+                return float(order.get('stopPrice') or order.get('price') or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        for order in ambiguous_orders:
+            price_val = _extract_order_price(order)
+            sl_diff = abs(price_val - float(sl_price))
+            tp_diff = abs(price_val - float(tp_price))
+            if tp_diff < sl_diff:
+                tp_orders.append(order)
+            else:
+                sl_orders.append(order)
+
+        def _filter_reduce_only(order_list, label):
+            """Ensure orders are reduce-only, cancel unsafe ones."""
+            valid = []
+            for order in order_list:
+                reduce_only = order.get('reduceOnly', order.get('reduce_only', False))
+                oid = order.get('id')
+                if oid and oid in cancelled_ids:
+                    continue
+                if reduce_only:
+                    valid.append(order)
+                else:
+                    print(f"⚠ {label} order {oid} for {symbol} is not reduce-only, cancelling")
+                    client.cancel_order(symbol, oid)
+                    if oid:
+                        cancelled_ids.add(oid)
+                    state.add_reconciliation_log(f"{label.lower()}_not_reduce_only", {
+                        "symbol": symbol,
+                        "order_id": oid,
+                        "message": f"{label} order cancelled because reduceOnly=False"
+                    })
+            return valid
+
+        sl_orders = _filter_reduce_only(sl_orders, "SL")
+        tp_orders = _filter_reduce_only(tp_orders, "TP")
+
+        def _dedupe_and_select(order_list, target_price, label):
+            """Select best matching order and cancel redundant ones."""
+            active_orders = [o for o in order_list if o.get('id') not in cancelled_ids]
+            if not active_orders:
+                return None
+            best = next(
+                (o for o in active_orders if order_matches_target(
+                    o, target_price=target_price, target_qty=formatted_size,
+                    qty_tol=config.TP_SL_QUANTITY_TOLERANCE)),
+                None
+            )
+            if not best:
+                best = min(
+                    active_orders,
+                    key=lambda o: abs(_extract_order_price(o) - float(target_price))
+                )
+            best_id = best.get('id')
+            for order in active_orders:
+                if ((best_id is not None and order.get('id') == best_id) or (best_id is None and order is best)):
+                    continue
+                oid = order.get('id')
+                print(f"Cancelling redundant {label} order {oid} for {symbol}")
+                client.cancel_order(symbol, oid)
+                if oid:
+                    cancelled_ids.add(oid)
+            return best
+
+        sl_order = _dedupe_and_select(sl_orders, sl_price, "SL")
+        tp_order = _dedupe_and_select(tp_orders, tp_price, "TP")
         
         # Check if TP/SL orders need to be placed or replaced
         needs_sl = False
         needs_tp = False
         
+        def _validate_order(best_order, target_price, label):
+            if not best_order:
+                return None, True
+            if order_matches_target(best_order, target_price=target_price, target_qty=formatted_size,
+                                    qty_tol=config.TP_SL_QUANTITY_TOLERANCE):
+                return best_order, False
+            oid = best_order.get('id')
+            print(f"⚠ {label} order {oid} for {symbol} mismatched target, cancelling")
+            client.cancel_order(symbol, oid)
+            if oid:
+                cancelled_ids.add(oid)
+            state.add_reconciliation_log(f"{label.lower()}_mismatch", {
+                "symbol": symbol,
+                "expected_size": formatted_size,
+                "expected_price": target_price,
+                "actual_size": best_order.get('amount'),
+                "actual_price": best_order.get('stopPrice') or best_order.get('price'),
+                "message": f"{label} order mismatched, replacing"
+            })
+            return None, True
+
+        sl_order, needs_sl = _validate_order(sl_order, sl_price, "SL")
         if not sl_order:
             print(f"⚠ Missing SL order for {symbol}")
-            needs_sl = True
             state.add_reconciliation_log("missing_sl_detected", {
                 "symbol": symbol,
                 "position_size": position_size,
                 "message": f"Position exists without SL order"
             })
-        else:
-            sl_amount = float(sl_order.get('amount', 0))
-            if abs(sl_amount - formatted_size) > formatted_size * config.TP_SL_QUANTITY_TOLERANCE:
-                print(f"⚠ SL quantity mismatch for {symbol}: {sl_amount} vs {formatted_size}")
-                needs_sl = True
-                # Cancel existing SL
-                client.cancel_order(symbol, sl_order['id'])
-                state.add_reconciliation_log("sl_quantity_mismatch", {
-                    "symbol": symbol,
-                    "expected": formatted_size,
-                    "actual": sl_amount,
-                    "message": f"SL order quantity mismatch, cancelling"
-                })
         
+        tp_order, needs_tp = _validate_order(tp_order, tp_price, "TP")
         if not tp_order:
             print(f"⚠ Missing TP order for {symbol}")
-            needs_tp = True
             state.add_reconciliation_log("missing_tp_detected", {
                 "symbol": symbol,
                 "position_size": position_size,
                 "message": f"Position exists without TP order"
             })
-        else:
-            tp_amount = float(tp_order.get('amount', 0))
-            if abs(tp_amount - formatted_size) > formatted_size * config.TP_SL_QUANTITY_TOLERANCE:
-                print(f"⚠ TP quantity mismatch for {symbol}: {tp_amount} vs {formatted_size}")
-                needs_tp = True
-                # Cancel existing TP
-                client.cancel_order(symbol, tp_order['id'])
-                state.add_reconciliation_log("tp_quantity_mismatch", {
-                    "symbol": symbol,
-                    "expected": formatted_size,
-                    "actual": tp_amount,
-                    "message": f"TP order quantity mismatch, cancelling"
-                })
         
         # Place missing or replacement orders
         if needs_sl or needs_tp:
@@ -495,10 +562,12 @@ def reconcile_existing_positions_with_trades(client):
                 tp_price = None
                 sl_price = None
                 
-                if tp_sl_orders and tp_sl_orders.get('tp_order'):
-                    tp_price = float(tp_sl_orders['tp_order'].get('stopPrice', 0) or 0)
-                if tp_sl_orders and tp_sl_orders.get('sl_order'):
-                    sl_price = float(tp_sl_orders['sl_order'].get('stopPrice', 0) or 0)
+                tp_candidates = tp_sl_orders.get('tp_orders', []) if tp_sl_orders else []
+                sl_candidates = tp_sl_orders.get('sl_orders', []) if tp_sl_orders else []
+                if tp_candidates:
+                    tp_price = float(tp_candidates[0].get('stopPrice', tp_candidates[0].get('price', 0)) or 0)
+                if sl_candidates:
+                    sl_price = float(sl_candidates[0].get('stopPrice', sl_candidates[0].get('price', 0)) or 0)
                 
                 state.add_trade({
                     'symbol': symbol,
@@ -671,11 +740,11 @@ def monitor_and_close_positions(client):
                     # Cancel existing TP/SL orders first
                     tp_sl_orders = client.get_tp_sl_orders_for_position(symbol)
                     cancelled_orders = []
-                    if tp_sl_orders.get('sl_order'):
-                        if client.cancel_order(symbol, tp_sl_orders['sl_order']['id']):
+                    for sl_order in tp_sl_orders.get('sl_orders', []):
+                        if client.cancel_order(symbol, sl_order.get('id')):
                             cancelled_orders.append('SL')
-                    if tp_sl_orders.get('tp_order'):
-                        if client.cancel_order(symbol, tp_sl_orders['tp_order']['id']):
+                    for tp_order in tp_sl_orders.get('tp_orders', []):
+                        if client.cancel_order(symbol, tp_order.get('id')):
                             cancelled_orders.append('TP')
                     
                     # Close position with market order

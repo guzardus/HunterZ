@@ -45,8 +45,8 @@ This implementation ensures all open positions have proper Take-Profit (TP) and 
 
 #### `get_tp_sl_orders_for_position(symbol)`
 - Retrieves existing TP/SL orders for a symbol
-- Identifies orders by type (STOP_MARKET, TAKE_PROFIT_MARKET)
-- Returns dict with sl_order and tp_order
+- Identifies orders by type (STOP/TAKE_PROFIT variants) and reduceOnly/stopPrice hints
+- Returns dict with `sl_orders` and `tp_orders` lists
 
 #### `cancel_order(symbol, order_id)`
 - Cancels a specific order by ID

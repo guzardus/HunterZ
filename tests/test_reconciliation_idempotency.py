@@ -265,5 +265,47 @@ class TestDuplicatePlacementMetrics(unittest.TestCase):
         )
 
 
+class TestDuplicateOrderReconciliation(unittest.TestCase):
+    """Tests for deduplicating TP/SL orders during reconciliation."""
+
+    def setUp(self):
+        state.bot_state.reconciliation_log = []
+
+    @patch('main.config')
+    def test_reconcile_dedupes_and_keeps_best(self, mock_config):
+        from main import reconcile_position_tp_sl
+
+        mock_config.TP_SL_QUANTITY_TOLERANCE = 0.01
+        mock_config.RR_RATIO = 2.0
+        mock_config.TP_SL_PLACEMENT_COOLDOWN_SECONDS = 0
+
+        mock_client = MagicMock()
+        mock_client.exchange.price_to_precision.side_effect = lambda s, p: p
+        mock_client.exchange.amount_to_precision.side_effect = lambda s, a: a
+        mock_client.place_stop_loss.return_value = {'id': 'new_sl'}
+        mock_client.place_take_profit.return_value = {'id': 'new_tp'}
+        mock_client.place_sl_tp_orders.return_value = {'sl_order': {'id': 'new_sl'}, 'tp_order': {'id': 'new_tp'}}
+
+        mock_client.get_tp_sl_orders_for_position.return_value = {
+            'sl_orders': [
+                {'id': 'keep_sl', 'stopPrice': 90.0, 'amount': 1.0, 'reduceOnly': True, 'symbol': 'BTC/USDC'},
+                {'id': 'dup_sl', 'stopPrice': 90.0, 'amount': 1.0, 'reduceOnly': True, 'symbol': 'BTC/USDC'}
+            ],
+            'tp_orders': [
+                {'id': 'keep_tp', 'stopPrice': 110.0, 'amount': 1.0, 'reduceOnly': True, 'symbol': 'BTC/USDC'},
+                {'id': 'dup_tp', 'stopPrice': 111.0, 'amount': 1.0, 'reduceOnly': True, 'symbol': 'BTC/USDC'}
+            ]
+        }
+
+        position = {'contracts': 1.0, 'entryPrice': 100.0}
+        pending = {'params': {'stop_loss': 90.0, 'take_profit': 110.0}}
+
+        result = reconcile_position_tp_sl(mock_client, 'BTC/USDC', position, pending)
+
+        self.assertTrue(result)
+        mock_client.cancel_order.assert_any_call('BTC/USDC', 'dup_sl')
+        mock_client.cancel_order.assert_any_call('BTC/USDC', 'dup_tp')
+
+
 if __name__ == '__main__':
     unittest.main()

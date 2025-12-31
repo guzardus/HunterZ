@@ -3,6 +3,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Supported TP/SL order types (including limit variants)
+TP_SL_ORDER_TYPES = {
+    'STOP', 'STOP_MARKET', 'STOP_LIMIT',
+    'TAKE_PROFIT', 'TAKE_PROFIT_MARKET', 'TAKE_PROFIT_LIMIT'
+}
+
 
 def safe_split(value, sep=':', maxsplit=-1):
     """

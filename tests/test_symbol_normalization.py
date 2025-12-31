@@ -97,10 +97,10 @@ class TestGetTPSLOrdersSymbolMatching(unittest.TestCase):
         result = client.get_tp_sl_orders_for_position('BTC/USDC:USDC')
         
         # Should match despite format difference
-        self.assertIsNotNone(result['sl_order'])
-        self.assertIsNotNone(result['tp_order'])
-        self.assertEqual(result['sl_order']['id'], 'sl_order_1')
-        self.assertEqual(result['tp_order']['id'], 'tp_order_1')
+        self.assertEqual(len(result['sl_orders']), 1)
+        self.assertEqual(len(result['tp_orders']), 1)
+        self.assertEqual(result['sl_orders'][0]['id'], 'sl_order_1')
+        self.assertEqual(result['tp_orders'][0]['id'], 'tp_order_1')
     
     @patch('execution.ccxt')
     def test_match_orders_same_format(self, mock_ccxt):
@@ -124,8 +124,8 @@ class TestGetTPSLOrdersSymbolMatching(unittest.TestCase):
         client = HyperliquidClient()
         result = client.get_tp_sl_orders_for_position('ETH/USDC')
         
-        self.assertIsNotNone(result['sl_order'])
-        self.assertEqual(result['sl_order']['id'], 'sl_order_1')
+        self.assertEqual(len(result['sl_orders']), 1)
+        self.assertEqual(result['sl_orders'][0]['id'], 'sl_order_1')
     
     @patch('execution.ccxt')
     def test_no_match_different_base_asset(self, mock_ccxt):
@@ -150,8 +150,8 @@ class TestGetTPSLOrdersSymbolMatching(unittest.TestCase):
         result = client.get_tp_sl_orders_for_position('BTC/USDC:USDC')
         
         # Should not match ETH orders for BTC position
-        self.assertIsNone(result['sl_order'])
-        self.assertIsNone(result['tp_order'])
+        self.assertEqual(result['sl_orders'], [])
+        self.assertEqual(result['tp_orders'], [])
 
 
 class TestOrderTypeDetection(unittest.TestCase):
@@ -179,8 +179,8 @@ class TestOrderTypeDetection(unittest.TestCase):
         client = HyperliquidClient()
         result = client.get_tp_sl_orders_for_position('BTC/USDC')
         
-        self.assertIsNotNone(result['sl_order'])
-        self.assertIsNone(result['tp_order'])
+        self.assertEqual(len(result['sl_orders']), 1)
+        self.assertEqual(result['tp_orders'], [])
     
     @patch('execution.ccxt')
     def test_detect_stop_market_lowercase(self, mock_ccxt):
@@ -204,7 +204,7 @@ class TestOrderTypeDetection(unittest.TestCase):
         client = HyperliquidClient()
         result = client.get_tp_sl_orders_for_position('BTC/USDC')
         
-        self.assertIsNotNone(result['sl_order'])
+        self.assertEqual(len(result['sl_orders']), 1)
     
     @patch('execution.ccxt')
     def test_detect_take_profit_market(self, mock_ccxt):
@@ -228,8 +228,8 @@ class TestOrderTypeDetection(unittest.TestCase):
         client = HyperliquidClient()
         result = client.get_tp_sl_orders_for_position('BTC/USDC')
         
-        self.assertIsNone(result['sl_order'])
-        self.assertIsNotNone(result['tp_order'])
+        self.assertEqual(result['sl_orders'], [])
+        self.assertEqual(len(result['tp_orders']), 1)
     
     @patch('execution.ccxt')
     def test_detect_stop_limit(self, mock_ccxt):
@@ -254,7 +254,7 @@ class TestOrderTypeDetection(unittest.TestCase):
         client = HyperliquidClient()
         result = client.get_tp_sl_orders_for_position('BTC/USDC')
         
-        self.assertIsNotNone(result['sl_order'])
+        self.assertEqual(len(result['sl_orders']), 1)
     
     @patch('execution.ccxt')
     def test_detect_order_with_stop_price_only(self, mock_ccxt):
@@ -280,7 +280,7 @@ class TestOrderTypeDetection(unittest.TestCase):
         result = client.get_tp_sl_orders_for_position('BTC/USDC')
         
         # Should detect as SL because 'STOP' contains 'STOP' and not 'TAKE_PROFIT'
-        self.assertIsNotNone(result['sl_order'])
+        self.assertEqual(len(result['sl_orders']), 1)
     
     @patch('execution.ccxt')
     def test_skip_non_reduce_only_limit_order(self, mock_ccxt):
@@ -305,8 +305,8 @@ class TestOrderTypeDetection(unittest.TestCase):
         result = client.get_tp_sl_orders_for_position('BTC/USDC')
         
         # Regular limit order should not be detected as TP/SL
-        self.assertIsNone(result['sl_order'])
-        self.assertIsNone(result['tp_order'])
+        self.assertEqual(result['sl_orders'], [])
+        self.assertEqual(result['tp_orders'], [])
 
 
 class TestReconciliationSafetyCheck(unittest.TestCase):
@@ -330,8 +330,8 @@ class TestReconciliationSafetyCheck(unittest.TestCase):
         
         # Simulate no existing TP/SL orders
         mock_client.get_tp_sl_orders_for_position.return_value = {
-            'sl_order': None,
-            'tp_order': None
+            'sl_orders': [],
+            'tp_orders': []
         }
         
         position = {
